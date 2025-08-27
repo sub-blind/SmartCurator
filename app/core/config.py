@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     # Security (3일차에 사용할 예정)
     SECRET_KEY: Optional[str] = None
     
+    access_token_expire_minutes: int = 30
+
     class Config:
         env_file = ".env"
 
