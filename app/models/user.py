@@ -19,7 +19,7 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
-    # Content 모델과 1:N 관계 설정 - 반드시 back_populates 이름 맞추기
+    # User 모델에 다음 라인 추가 (기존 주석 해제)
     contents = relationship("Content", back_populates="owner", cascade="all, delete-orphan")
 
     def __repr__(self):

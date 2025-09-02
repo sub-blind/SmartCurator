@@ -4,9 +4,8 @@ from app.core.database import get_async_session
 from app.core.config import settings
 from app.models.user import User
 from dotenv import load_dotenv
-
-# 인증 API 라우터 import
 from app.api.v1 import auth
+from app.api.v1 import content
 
 load_dotenv()
 
@@ -30,7 +29,7 @@ async def health_check():
     return {
         "status": "healthy",
         "database": "connected",
-        "environment": settings.ENV
+        "environment": getattr(settings, "ENV", getattr(settings, "ENVIRONMENT", "unknown"))  # 환경 변수명 호환성
     }
 
 @app.get("/test-db")
@@ -77,9 +76,18 @@ async def create_test_user(session: AsyncSession = Depends(get_async_session)):
             "details": str(e)
         }
 
-# 인증 라우터 등록
+# 인증/컨텐츠 라우터 등록 (최종 추가)
 app.include_router(auth.router)
+app.include_router(content.router)
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+import logging
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)

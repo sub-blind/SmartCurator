@@ -9,12 +9,34 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str
     
-    # Security (3일차에 사용할 예정)
+    # Security
     SECRET_KEY: Optional[str] = None
-    
+    algorithm: str = "HS256"  # JWT 알고리즘
+
     access_token_expire_minutes: int = 30
+
+    # Scraper
+    scraper_timeout: int = 10
+
+    # Content Limit
+    max_content_length: int = 5000
+
+    # OpenAI 설정
+    OPENAI_API_KEY: str
+    OPENAI_MODEL: str = "gpt-3.5-turbo"  # ← 이 줄 추가
+    OPENAI_MAX_TOKENS: int = 4000
+    OPENAI_TEMPERATURE: float = 0.3
 
     class Config:
         env_file = ".env"
 
 settings = Settings()
+
+try:
+    # 콘텐츠 처리 로직
+    ...
+except Exception as e:
+    import traceback
+    print("백그라운드 작업 실패:", e)
+    traceback.print_exc()
+    # DB에 status='failed' 저장
