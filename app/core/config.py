@@ -10,10 +10,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     
     # Security
-    SECRET_KEY: Optional[str] = None
-    algorithm: str = "HS256"  # JWT 알고리즘
-
-    access_token_expire_minutes: int = 30
+    SECRET_KEY: str = "your-secret-key-here"
+    ALGORITHM: str = "HS256"  # JWT 알고리즘
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
     # Scraper
     scraper_timeout: int = 10

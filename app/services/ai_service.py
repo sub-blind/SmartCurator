@@ -122,7 +122,7 @@ URL: {url}
 """
         
         try:
-            response = await openai.ChatCompletion.acreate(
+            response = openai.chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=100,
