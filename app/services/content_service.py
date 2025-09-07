@@ -12,7 +12,6 @@ from app.services.ai_service import AIService
 
 logger = logging.getLogger(__name__)
 
-
 class ContentService:
     """컨텐츠 관련 비즈니스 로직"""
 

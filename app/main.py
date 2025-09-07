@@ -4,8 +4,7 @@ from app.core.database import get_async_session
 from app.core.config import settings
 from app.models.user import User
 from dotenv import load_dotenv
-from app.api.v1 import auth
-from app.api.v1 import content
+from app.api.v1 import auth, content
 
 load_dotenv()
 
@@ -15,8 +14,10 @@ app = FastAPI(
     version="0.1.0"
 )
 
+
 @app.get("/")
 async def root():
+    """루트 헬스 체크 및 서버 상태 확인"""
     return {
         "message": "SmartCurator is running!",
         "status": "healthy",
@@ -24,16 +25,20 @@ async def root():
         "database": "connected" if settings.DATABASE_URL else "not configured"
     }
 
+
 @app.get("/health")
 async def health_check():
+    """서비스 헬스 체크 엔드포인트"""
     return {
         "status": "healthy",
         "database": "connected",
-        "environment": getattr(settings, "ENV", getattr(settings, "ENVIRONMENT", "unknown"))  # 환경 변수명 호환성
+        "environment": getattr(settings, "ENV", getattr(settings, "ENVIRONMENT", "unknown"))
     }
+
 
 @app.get("/test-db")
 async def test_database(session: AsyncSession = Depends(get_async_session)):
+    """데이터베이스 연결 및 간단한 쿼리 테스트"""
     try:
         result = await session.execute("SELECT 1")
         db_status = "connected"
@@ -51,8 +56,10 @@ async def test_database(session: AsyncSession = Depends(get_async_session)):
             "error": str(e)
         }
 
+
 @app.post("/test-user")
 async def create_test_user(session: AsyncSession = Depends(get_async_session)):
+    """테스트용 유저 생성 (개발용)"""
     try:
         test_user = User(
             email="test@example.com",
@@ -76,9 +83,11 @@ async def create_test_user(session: AsyncSession = Depends(get_async_session)):
             "details": str(e)
         }
 
-# 인증/컨텐츠 라우터 등록 (최종 추가)
+
+# 인증(auth)과 컨텐츠(content) API 라우터 등록
 app.include_router(auth.router)
 app.include_router(content.router)
+
 
 if __name__ == "__main__":
     import uvicorn
@@ -87,6 +96,7 @@ if __name__ == "__main__":
 
 import logging
 
+# 로깅 설정 (디버그 레벨, 시간, 이름, 수준, 메시지 출력)
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"

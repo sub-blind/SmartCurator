@@ -4,7 +4,6 @@ from sqlalchemy.future import select
 
 from app.core.database import get_db_session, get_async_session
 from app.core.dependencies import get_current_user
-from app.core.security import create_access_token
 from app.models.user import User
 from app.schemas.auth import UserLogin, TokenResponse
 from app.schemas.user import UserCreate, UserRead, UserUpdate
@@ -18,8 +17,7 @@ async def register(
     user: UserCreate,
     session: AsyncSession = Depends(get_async_session),
 ):
-    """회원 가입"""
-    # 이메일 중복 체크
+    """회원 가입 - 이메일 중복 체크 후 신규 사용자 등록"""
     result = await session.execute(select(User).where(User.email == user.email))
     if result.scalars().first():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already exists")
@@ -39,7 +37,7 @@ async def login(
     user: UserLogin,
     session: AsyncSession = Depends(get_db_session),
 ):
-    """로그인 및 토큰 발급"""
+    """로그인 처리 및 JWT 토큰 발급"""
     auth_service = AuthService(session)
     authenticated = await auth_service.authenticate_user(user.email, user.password)
     if not authenticated:
@@ -53,7 +51,7 @@ async def login(
 async def read_me(
     current_user=Depends(get_current_user),
 ):
-    """현재 로그인한 사용자 정보 조회"""
+    """현재 인증된 사용자 정보 조회"""
     return current_user
 
 
@@ -63,7 +61,7 @@ async def update_profile(
     session: AsyncSession = Depends(get_async_session),
     current_user=Depends(get_current_user),
 ):
-    """프로필 업데이트"""
+    """로그인 사용자 프로필 업데이트"""
     if update.full_name is not None:
         current_user.full_name = update.full_name
     if update.bio is not None:

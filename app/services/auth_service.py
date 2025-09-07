@@ -3,6 +3,7 @@ from app.models.user import User
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
+
 class AuthService:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -14,6 +15,7 @@ class AuthService:
         full_name: str = None,
         bio: str = None
     ) -> User:
+        """새 사용자 등록"""
         hashed_pw = get_password_hash(password)
         new_user = User(
             email=email,
@@ -31,7 +33,7 @@ class AuthService:
         email: str,
         password: str
     ) -> User | None:
-        # 내부 세션 호출 제거, self.session 사용
+        """사용자 인증 - 이메일과 비밀번호 검사"""
         result = await self.session.execute(
             select(User).where(User.email == email)
         )
@@ -41,5 +43,6 @@ class AuthService:
         return user
 
     def create_token_for_user(self, user: User) -> str:
+        """JWT 액세스 토큰 생성"""
         token_data = {"sub": str(user.id), "email": user.email}
         return create_access_token(token_data)
