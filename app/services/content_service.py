@@ -50,9 +50,7 @@ class ContentService:
         await self.db.commit()
         await self.db.refresh(new_content)
 
-        # 지연 임포트로 순환참조 방지
         from app.tasks.content_tasks import process_content_task
-
         task = process_content_task.delay(new_content.id)
         logger.info(f"백그라운드 태스크 시작: content_id={new_content.id}, task_id={task.id}")
 
@@ -99,7 +97,7 @@ class ContentService:
         return content
 
     async def delete_content(self, content_id: int, user_id: int) -> bool:
-        """컨텐츠 삭제"""
+        """컨텐츠 및 벡터 동시 삭제"""
         content = await self.get_content_by_id(content_id)
         if not content:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="컨텐츠를 찾을 수 없습니다")
@@ -108,10 +106,15 @@ class ContentService:
 
         await self.db.delete(content)
         await self.db.commit()
+
+        # 🆕 벡터 삭제 추가
+        from app.services.vector_service import vector_service
+        await vector_service.delete_content_vector(content_id)
+        logger.info(f"🗑️ 벡터 삭제 완료: content_id={content_id}")
         return True
 
     async def process_content_async(self, content_id: int) -> Content:
-        """컨텐츠 비동기 처리 (크롤링 + AI 요약)"""
+        """컨텐츠 비동기 처리 (크롤링 + AI 요약 + 벡터 저장)"""
         content = await self.get_content_by_id(content_id)
         if not content:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="컨텐츠를 찾을 수 없습니다")
@@ -151,6 +154,20 @@ class ContentService:
             await self.db.commit()
             await self.db.refresh(content)
             logger.debug(f"콘텐츠 처리 완료: {content_id}, status={content.status}")
+
+            # 🆕 벡터 저장 추가
+            if content.status == "completed" and content.summary:
+                from app.services.vector_service import vector_service
+                await vector_service.store_content_vector(
+                    content_id=content.id,
+                    title=content.title,
+                    summary=content.summary,
+                    tags=content.tags or [],
+                    user_id=content.user_id,
+                    is_public=content.is_public
+                )
+                logger.info(f"🔍 벡터 저장 완료: content_id={content.id}")
+
             return content
 
         except Exception as e:

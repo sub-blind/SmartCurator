@@ -34,14 +34,14 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
 
-async def get_db_session() -> AsyncSession:
+async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     """
-    FastAPI 의존성 주입용 세션 함수.
-    - FastAPI가 AsyncSession 객체를 직접 주입할 수 있도록 설계됨.
+    FastAPI 의존성 주입용 세션 함수 (yield 기반).
+    - 요청 시작에 세션을 생성하여 주입하고, 요청 종료 시 자동으로 정리.
     - 엔드포인트에서 Depends(get_db_session) 형태로 사용.
     """
     async with async_session_maker() as session:
-        return session
+        yield session
 
 
 async def init_db():

@@ -5,6 +5,7 @@ from app.core.config import settings
 from app.models.user import User
 from dotenv import load_dotenv
 from app.api.v1 import auth, content
+from app.api.v1 import search, chat
 
 load_dotenv()
 
@@ -87,6 +88,8 @@ async def create_test_user(session: AsyncSession = Depends(get_async_session)):
 # 인증(auth)과 컨텐츠(content) API 라우터 등록
 app.include_router(auth.router)
 app.include_router(content.router)
+app.include_router(search.router)
+app.include_router(chat.router)
 
 
 if __name__ == "__main__":
