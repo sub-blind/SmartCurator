@@ -1,6 +1,7 @@
 # app/core/celery_app.py
 from celery import Celery
 import logging
+from app.core.config import settings
 
 
 # 로거 설정
@@ -10,9 +11,9 @@ logger = logging.getLogger(__name__)
 # Celery 앱 생성
 celery_app = Celery(
     "smartcurator",
-    broker="redis://localhost:6379/0",         # Redis 브로커 주소
-    backend="redis://localhost:6379/1",        # 결과 저장소 주소
-    include=["app.tasks.content_tasks"]        # 등록할 태스크 모듈 리스트
+    broker=settings.CELERY_BROKER_URL,
+    backend=settings.CELERY_RESULT_BACKEND or settings.CELERY_BROKER_URL,
+    include=["app.tasks.content_tasks"]
 )
 
 

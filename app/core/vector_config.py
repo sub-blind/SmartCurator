@@ -3,7 +3,9 @@ from qdrant_client.http.models import Distance, VectorParams
 from app.core.config import settings
 import logging
 
+
 logger = logging.getLogger(__name__)
+
 
 class VectorDBConfig:
     """Qdrant 벡터 데이터베이스 설정 및 관리"""
@@ -25,12 +27,14 @@ class VectorDBConfig:
             collection_names = [col.name for col in collections.collections]
             
             if self.collection_name not in collection_names:
+                # ⭐ on_disk_payload=False 추가 (중요!)
                 self.client.create_collection(
                     collection_name=self.collection_name,
                     vectors_config=VectorParams(
                         size=self.vector_size,
                         distance=Distance.COSINE  # 코사인 유사도 사용
-                    )
+                    ),
+                    on_disk_payload=False  # ← 메모리 인덱싱 사용
                 )
                 logger.info(f"✅ Qdrant 컬렉션 생성: {self.collection_name}")
             else:
@@ -39,5 +43,6 @@ class VectorDBConfig:
         except Exception as e:
             logger.error(f"❌ Qdrant 설정 오류: {e}")
             raise
+
 
 vector_db = VectorDBConfig()

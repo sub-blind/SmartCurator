@@ -5,6 +5,14 @@ __pycache__/
 *.so
 venv/
 .env
+.env.*
+
+# Node / frontend
+frontend/node_modules/
+frontend/.next/
+frontend/.turbo/
+frontend/dist/
+frontend/.env.local
 
 # IDE
 .vscode/

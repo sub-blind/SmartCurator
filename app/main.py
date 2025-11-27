@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_async_session
 from app.core.config import settings
@@ -13,6 +14,20 @@ app = FastAPI(
     title="SmartCurator API",
     description="AI-powered personal knowledge curation platform",
     version="0.1.0"
+)
+
+allowed_origins = [
+    "http://localhost",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000"
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 

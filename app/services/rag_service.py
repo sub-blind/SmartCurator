@@ -3,7 +3,9 @@ from app.services.vector_service import vector_service
 from app.services.ai_service import AIService
 import logging
 
+
 logger = logging.getLogger(__name__)
+
 
 class RAGService:
     """RAG(Retrieval-Augmented Generation) 서비스"""
@@ -15,15 +17,20 @@ class RAGService:
     async def ask_question(self, question: str, user_id: int) -> Dict:
         """사용자 질문에 대한 RAG 기반 답변 생성"""
         try:
+            logger.info(f"🤔 RAG 질문: '{question}' (user_id={user_id})")
+            
             # 1단계: 관련 컨텐츠 검색
             relevant_contents = await vector_service.search_similar_contents(
                 query=question,
                 user_id=user_id,
                 limit=5,
-                score_threshold=0.4
+                score_threshold=0.3
             )
             
+            logger.info(f"📚 검색된 컨텐츠: {len(relevant_contents)}개")
+            
             if not relevant_contents:
+                logger.warning(f"⚠️ 관련 컨텐츠 없음: question='{question}'")
                 return {
                     "answer": "죄송합니다. 질문과 관련된 저장된 내용을 찾을 수 없습니다. 더 많은 컨텐츠를 저장해보세요.",
                     "sources": [],
@@ -32,12 +39,17 @@ class RAGService:
             
             # 2단계: 컨텍스트 구성
             context = self._build_context(relevant_contents)
+            logger.info(f"📄 컨텍스트 길이: {len(context)} chars")
             
-            # 3단계: AI 답변 생성
-            prompt = self._create_rag_prompt(question, context)
-            ai_response = await self.ai_service.generate_response(prompt)
+            # 3단계: AI 답변 생성 (질답용)
+            logger.info(f"🤖 OpenAI 질답 호출...")
+            ai_response = await self.ai_service.answer_question(
+                question=question,
+                context=context
+            )
             
             if not ai_response.get("success"):
+                logger.error(f"❌ AI 답변 생성 실패: {ai_response.get('error')}")
                 return {
                     "answer": "답변 생성 중 오류가 발생했습니다.",
                     "sources": [],
@@ -45,21 +57,24 @@ class RAGService:
                 }
             
             # 4단계: 응답 구성
-            return {
-                "answer": ai_response["response"],
+            response = {
+                "answer": ai_response.get("answer", "답변을 생성할 수 없습니다."),
                 "sources": [
                     {
                         "content_id": content["content_id"],
                         "title": content["title"],
-                        "similarity_score": content["similarity_score"]
+                        "similarity_score": round(content["similarity_score"], 3)
                     }
                     for content in relevant_contents
                 ],
                 "confidence": self._calculate_confidence(relevant_contents)
             }
             
+            logger.info(f"✅ RAG 답변 생성 완료 (신뢰도: {response['confidence']:.2f})")
+            return response
+            
         except Exception as e:
-            logger.error(f"RAG 질의응답 오류: {e}")
+            logger.error(f"❌ RAG 질의응답 오류: {e}", exc_info=True)
             return {
                 "answer": "죄송합니다. 답변 생성 중 오류가 발생했습니다.",
                 "sources": [],
@@ -71,8 +86,12 @@ class RAGService:
         context_parts = []
         current_length = 0
         
-        for content in contents:
-            content_text = f"제목: {content['title']}\n요약: {content['summary']}\n태그: {', '.join(content['tags'])}\n"
+        for i, content in enumerate(contents, 1):
+            content_text = f"""
+[출처 {i}] {content['title']}
+요약: {content['summary']}
+관련도: {content['similarity_score']:.1%}
+---"""
             
             if current_length + len(content_text) > self.max_context_length:
                 break
@@ -80,25 +99,7 @@ class RAGService:
             context_parts.append(content_text)
             current_length += len(content_text)
         
-        return "\n---\n".join(context_parts)
-    
-    def _create_rag_prompt(self, question: str, context: str) -> str:
-        """RAG 프롬프트 생성"""
-        return f"""당신은 사용자의 개인 지식 어시스턴트입니다. 아래 제공된 컨텍스트를 바탕으로 질문에 답변해주세요.
-
-**컨텍스트:**
-{context}
-
-**질문:** {question}
-
-**답변 가이드라인:**
-1. 제공된 컨텍스트만을 사용하여 답변하세요
-2. 컨텍스트에 없는 정보는 추측하지 마세요
-3. 답변이 불확실하다면 솔직히 말하세요
-4. 가능한 구체적이고 유용한 답변을 제공하세요
-5. 한국어로 답변하세요
-
-**답변:**"""
+        return "\n".join(context_parts)
     
     def _calculate_confidence(self, contents: List[Dict]) -> float:
         """답변 신뢰도 계산"""
@@ -108,6 +109,8 @@ class RAGService:
         avg_score = sum(content["similarity_score"] for content in contents) / len(contents)
         content_bonus = min(len(contents) * 0.1, 0.3)
         
-        return min(avg_score + content_bonus, 1.0)
+        confidence = min(avg_score + content_bonus, 1.0)
+        return round(confidence, 3)
+
 
 rag_service = RAGService()

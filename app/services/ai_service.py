@@ -4,7 +4,9 @@ import json
 from typing import Dict, List
 from app.core.config import settings
 
+
 logger = logging.getLogger(__name__)
+
 
 class AIService:
     """OpenAI GPT를 활용한 AI 서비스"""
@@ -133,24 +135,99 @@ class AIService:
                 "success": False,
                 "error": str(e)
             }
+
+    async def answer_question(self, question: str, context: str) -> Dict:
+        """컨텍스트를 기반으로 질문에 답변 (RAG용)"""
+        
+        prompt = f"""당신은 사용자의 개인 지식 어시스턴트입니다.
+
+사용자가 저장한 컨텐츠 기반 정보:
+{context}
+
+사용자 질문: {question}
+
+위의 컨텍스트를 바탕으로 질문에 답변해주세요.
+- 제공된 정보만 사용하세요
+- 없는 정보는 추측하지 마세요
+- 구체적이고 유용한 답변을 제공하세요"""
+        
+        try:
+            logger.info(f"🤖 RAG 질답 시작: question='{question[:50]}...'")
+            
+            if self.client:
+                # 새로운 OpenAI 클라이언트 사용
+                response = await self.client.chat.completions.create(
+                    model=self.model_name,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "당신은 사용자의 개인 지식 어시스턴트입니다. 제공된 정보만 사용하여 정확하게 답변합니다."
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    max_tokens=500,
+                    temperature=0.7
+                )
+            else:
+                # 구버전 openai 패키지 대응
+                import openai
+                response = await openai.ChatCompletion.acreate(
+                    model=self.model_name,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "당신은 사용자의 개인 지식 어시스턴트입니다. 제공된 정보만 사용하여 정확하게 답변합니다."
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    max_tokens=500,
+                    temperature=0.7
+                )
+            
+            answer = response.choices[0].message.content.strip()
+            logger.info(f"✅ RAG 질답 완료: {answer[:50]}...")
+            
+            return {
+                "success": True,
+                "answer": answer,
+                "token_used": response.usage.total_tokens
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ RAG 질답 실패: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": str(e),
+                "answer": ""
+            }
     
     def _create_summary_prompt(self, title: str, content: str, url: str) -> str:
         """요약 프롬프트 생성"""
         return f"""
 다음 웹 컨텐츠를 분석하여 한국어로 요약하고 태그를 생성해주세요.
 
+
 제목: {title}
 URL: {url}
 내용:
 {content}
+
 
 요청사항:
 1. 핵심 내용을 3-4문장으로 간결하게 요약
 2. 관련 키워드/태그 5개 이하 추출 (한국어)
 3. 아래 형식으로 응답:
 
+
 요약: [여기에 요약 내용]
 태그: [태그1, 태그2, 태그3, 태그4, 태그5]
+
 
 주의사항:
 - 정확한 정보만 포함
@@ -192,6 +269,7 @@ URL: {url}
         prompt = f"""
 제목: {title}
 요약: {summary}
+
 
 위 내용과 관련된 한국어 키워드 5개를 생성해주세요.
 형식: 키워드1, 키워드2, 키워드3, 키워드4, 키워드5

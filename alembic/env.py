@@ -17,7 +17,7 @@ from app.models import *  # 모든 모델 import
 config = context.config
 
 # 환경변수에서 DATABASE_URL 가져와서 설정
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("+asyncpg", ""))
+config.set_main_option("sqlalchemy.url", settings.sync_database_url)
 
 # Interpret the config file for Python logging.
 if config.config_file_name is not None:
