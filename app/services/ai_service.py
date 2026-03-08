@@ -111,28 +111,6 @@ class AIService:
             logger.error(f"최종 요약 합성 실패: {e}")
             return {"success": False, "error": str(e)}
 
-    async def generate_response(self, prompt: str) -> Dict:
-        """RAG 시스템용 텍스트 생성"""
-        try:
-            response = await self._chat_completion(
-                system_message="당신은 도움이 되는 개인 지식 어시스턴트입니다.",
-                user_message=prompt,
-                max_tokens=1000,
-                temperature=0.3,
-            )
-            return {
-                "success": True,
-                "response": response.choices[0].message.content,
-                "usage": {
-                    "prompt_tokens": response.usage.prompt_tokens,
-                    "completion_tokens": response.usage.completion_tokens,
-                    "total_tokens": response.usage.total_tokens,
-                },
-            }
-        except Exception as e:
-            logger.error(f"AI 응답 생성 실패: {e}")
-            return {"success": False, "error": str(e)}
-
     async def answer_question(self, question: str, context: str) -> Dict[str, Any]:
         """chunk 기반 컨텍스트를 활용한 RAG 답변."""
         prompt = f"""당신은 사용자의 개인 지식 어시스턴트입니다.
@@ -170,27 +148,6 @@ class AIService:
         except Exception as e:
             logger.error(f"❌ RAG 질답 실패: {e}", exc_info=True)
             return {"success": False, "error": str(e), "answer": ""}
-
-    async def generate_tags_only(self, title: str, summary: str) -> List[str]:
-        prompt = f"""
-제목: {title}
-요약: {summary}
-
-위 내용과 관련된 한국어 키워드 5개를 생성해주세요.
-아래 JSON만 반환하세요.
-{{"tags": ["키워드1", "키워드2", "키워드3", "키워드4", "키워드5"]}}
-"""
-        try:
-            response = await self._chat_json(
-                system_message="태그만 생성하는 분류기입니다.",
-                user_message=prompt,
-                max_tokens=120,
-                temperature=0.2,
-            )
-            return response.get("tags", [])[:5] or ["일반"]
-        except Exception as e:
-            logger.error(f"태그 생성 실패: {e}")
-            return ["일반"]
 
     def _create_chunk_summary_prompt(self, title: str, chunk: str, url: str) -> str:
         return f"""
