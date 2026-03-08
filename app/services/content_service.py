@@ -8,6 +8,7 @@ from sqlalchemy.future import select
 from app.models.content import Content
 from app.services.scraper_service import ScraperService
 from app.services.ai_service import AIService
+from app.utils.text_chunking import split_into_chunks
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +28,9 @@ class ContentService:
         url: Optional[str] = None,
         raw_content: Optional[str] = None,
         content_type: str = "url",
-        is_public: bool = False
+        is_public: bool = False,
     ) -> Content:
-        """새 컨텐츠 생성 및 Celery 백그라운드 태스크 등록"""
+        """새 컨텐츠 생성 (태스크 발행은 API 레이어에서 담당)"""
         if not url and not raw_content:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -49,11 +50,6 @@ class ContentService:
         self.db.add(new_content)
         await self.db.commit()
         await self.db.refresh(new_content)
-
-        from app.tasks.content_tasks import process_content_task
-        task = process_content_task.delay(new_content.id)
-        logger.info(f"백그라운드 태스크 시작: content_id={new_content.id}, task_id={task.id}")
-
         return new_content
 
     async def get_content_by_id(self, content_id: int) -> Optional[Content]:
@@ -159,20 +155,47 @@ class ContentService:
                     await self.db.flush()
                     raise Exception(error_msg)
 
-            # AI 요약 처리
+            # AI 요약 처리 (chunk 기반 2단계)
             if content.raw_content:
                 logger.info(f"🤖 AI 요약 시작: content_id={content_id}")
-                ai_res = await self.ai_service.summarize_content(
-                    content.raw_content,
-                    content.title or "",
-                    content.url or ""
-                )
-                
+                chunks = split_into_chunks(content.raw_content, chunk_size=1100, overlap=180)
+                chunk_summaries: List[str] = []
+
+                for index, chunk in enumerate(chunks or [content.raw_content], start=1):
+                    chunk_res = await self.ai_service.summarize_chunk(
+                        chunk,
+                        content.title or "",
+                        content.url or "",
+                    )
+                    if not chunk_res.get("success"):
+                        error_msg = chunk_res.get("error", f"{index}번째 chunk 요약 실패")
+                        logger.error(f"❌ chunk 요약 실패: {error_msg}")
+                        content.status = "failed"
+                        await self.db.flush()
+                        raise Exception(error_msg)
+                    chunk_summaries.append(chunk_res.get("summary", ""))
+
+                if len(chunk_summaries) == 1:
+                    ai_res = await self.ai_service.summarize_content(
+                        content.raw_content,
+                        content.title or "",
+                        content.url or "",
+                    )
+                else:
+                    ai_res = await self.ai_service.synthesize_chunk_summaries(
+                        title=content.title or "",
+                        url=content.url or "",
+                        chunk_summaries=chunk_summaries,
+                    )
+
                 if ai_res.get("success"):
                     content.summary = ai_res.get("summary")
                     content.tags = ai_res.get("tags", [])
                     content.status = "completed"
-                    logger.info(f"✅ AI 요약 완료: {len(content.summary)} chars, {len(content.tags)} tags")
+                    logger.info(
+                        f"✅ AI 요약 완료: {len(content.summary or '')} chars,"
+                        f" {len(content.tags or [])} tags, {len(chunk_summaries)} chunks"
+                    )
                 else:
                     error_msg = ai_res.get("error", "AI 요약 실패")
                     logger.error(f"❌ AI 요약 실패: {error_msg}")

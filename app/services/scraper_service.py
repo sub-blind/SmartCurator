@@ -110,28 +110,36 @@ class ScraperService:
             str: 추출된 텍스트 본문 (최대 5000자 제한)
         """
         # 불필요 태그 제거
-        for tag in soup(["script", "style", "nav", "footer", "aside"]):
+        for tag in soup(["script", "style", "nav", "footer", "aside", "form", "noscript"]):
             tag.decompose()
 
         # <article> 또는 <main> 태그 우선 탐색
         main_content = soup.find("article") or soup.find("main")
         if main_content:
-            return main_content.get_text(separator=" ", strip=True)
+            return self._clean_content(main_content.get_text(separator=" ", strip=True))
 
         # 특정 클래스명을 포함하는 div 탐색 (content, article, post, main)
         content_divs = soup.find_all(
             "div",
             class_=lambda x: x and any(
-                keyword in x.lower() for keyword in ["content", "article", "post", "main"]
+                keyword in x.lower()
+                for keyword in ["content", "article", "post", "main", "story", "entry", "news"]
             )
         )
         if content_divs:
-            return " ".join(div.get_text(separator=" ", strip=True) for div in content_divs)
+            joined = " ".join(div.get_text(separator=" ", strip=True) for div in content_divs)
+            return self._clean_content(joined)
+
+        # 긴 <p> 텍스트를 우선 합성
+        paragraphs = [p.get_text(separator=" ", strip=True) for p in soup.find_all("p")]
+        paragraphs = [p for p in paragraphs if len(p) > 40]
+        if paragraphs:
+            return self._clean_content(" ".join(paragraphs))
 
         # <body> 텍스트 반환 (최대 5000자)
         body = soup.find("body")
         if body:
-            return body.get_text(separator=" ", strip=True)[:5000]
+            return self._clean_content(body.get_text(separator=" ", strip=True))
 
         return "내용을 추출할 수 없습니다."
 
@@ -154,3 +162,13 @@ class ScraperService:
             return meta_desc["content"].strip()
 
         return None
+
+    def _clean_content(self, text: str) -> str:
+        """광고성/중복 공백을 줄이고 본문 길이를 제한한다."""
+        if not text:
+            return "내용을 추출할 수 없습니다."
+        text = " ".join(text.split())
+        noisy_keywords = ["쿠키", "광고", "구독", "로그인", "회원가입", "저작권", "무단 전재"]
+        for keyword in noisy_keywords:
+            text = text.replace(keyword, "")
+        return text[:8000].strip() or "내용을 추출할 수 없습니다."

@@ -69,9 +69,9 @@ class EmbeddingService:
         text = text.replace('\n', ' ').replace('\r', ' ')
         text = ' '.join(text.split())
         
-        # 토큰 길이 제한 (모델 제약)
-        if len(text) > 1000:
-            text = text[:1000]
+        # 검색 chunk를 충분히 보존하되 너무 길지는 않게 제한
+        if len(text) > 1500:
+            text = text[:1500]
             
         return text
 

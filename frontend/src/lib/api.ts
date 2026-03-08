@@ -1,3 +1,5 @@
+import type { ChatAnswer, ContentItem, SemanticSearchResponse } from "@/types/content";
+
 type FetchOptions = {
   method?: "GET" | "POST" | "PUT" | "DELETE";
   body?: Record<string, unknown>;
@@ -35,6 +37,11 @@ export const api = {
     }),
   register: (params: { email: string; password: string; full_name?: string }) =>
     smartFetch("/auth/register", { method: "POST", body: params }),
+  logout: (token: string) =>
+    smartFetch<{ message: string; user_id: number }>("/auth/logout", {
+      method: "POST",
+      token
+    }),
   quickAddContent: (params: {
     title: string;
     url?: string;
@@ -53,6 +60,35 @@ export const api = {
         content_type: params.content_type,
         is_public: params.is_public
       }
+    }),
+  getMyContents: (token: string) =>
+    smartFetch<ContentItem[]>("/contents/my?skip=0&limit=50", {
+      method: "GET",
+      token
+    }),
+  deleteContent: (id: number, token: string) =>
+    smartFetch<{ message: string }>(`/contents/${id}`, {
+      method: "DELETE",
+      token
+    }),
+  reprocessContent: (id: number, token: string) =>
+    smartFetch<{ message: string }>(`/contents/${id}/reprocess`, {
+      method: "POST",
+      token
+    }),
+  semanticSearch: (query: string, token: string) =>
+    smartFetch<SemanticSearchResponse>(
+      `/search/semantic?q=${encodeURIComponent(query)}&limit=6&score_threshold=0.30`,
+      {
+        method: "GET",
+        token
+      }
+    ),
+  askAssistant: (question: string, token: string) =>
+    smartFetch<ChatAnswer>("/chat/ask", {
+      method: "POST",
+      token,
+      body: { question }
     })
 };
 

@@ -72,3 +72,18 @@ async def update_profile(
     await session.commit()
     await session.refresh(current_user)
     return current_user
+
+
+@router.post("/logout")
+async def logout(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    JWT 기반 로그아웃.
+    서버는 토큰 상태를 보관하지 않으므로 클라이언트 측 토큰 삭제가 핵심이며,
+    본 엔드포인트는 명시적 로그아웃 액션/감사용 훅으로 사용한다.
+    """
+    return {
+        "message": "로그아웃되었습니다. 클라이언트 토큰을 삭제하세요.",
+        "user_id": current_user.id,
+    }

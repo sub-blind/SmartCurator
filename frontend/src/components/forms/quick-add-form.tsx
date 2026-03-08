@@ -18,10 +18,16 @@ const defaultState: FormState = {
   url: "",
   content: "",
   type: "url",
-  isPublic: true
+  isPublic: true,
 };
 
-export function QuickAddForm({ token }: { token: string | null }) {
+export function QuickAddForm({
+  token,
+  onCreated,
+}: {
+  token: string | null;
+  onCreated?: () => void;
+}) {
   const [form, setForm] = useState<FormState>(defaultState);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -50,6 +56,9 @@ export function QuickAddForm({ token }: { token: string | null }) {
       await api.quickAddContent(payload);
       setMessage("컨텐츠가 백엔드 큐에 등록되었습니다!");
       setForm(defaultState);
+      if (onCreated) {
+        onCreated();
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "등록 실패");
     } finally {

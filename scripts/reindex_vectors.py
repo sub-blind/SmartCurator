@@ -1,9 +1,19 @@
 import asyncio
+import sys
+from pathlib import Path
+
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
+
+# `python scripts/reindex_vectors.py`처럼 직접 실행해도
+# 프로젝트 루트의 `app` 패키지를 찾을 수 있도록 경로를 보강한다.
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 from app.core.database import async_engine
 from app.models.content import Content
 from app.services.vector_service import vector_service
-from sqlalchemy import select
 
 
 async def reindex():
@@ -11,6 +21,10 @@ async def reindex():
     AsyncSessionMaker = async_sessionmaker(async_engine, expire_on_commit=False)
     
     try:
+        from app.core.vector_config import vector_db
+
+        await vector_db.recreate_collection()
+
         async with AsyncSessionMaker() as session:
             result = await session.execute(
                 select(Content).where(
@@ -31,13 +45,14 @@ async def reindex():
                 print(f"   - summary_len={len(content.summary) if content.summary else 0}")
                 
                 try:
-                    success = await vector_service.store_content_vector(
+                    success = await vector_service.store_content_chunks(
                         content_id=content.id,
                         title=content.title or "",
                         summary=content.summary or "",
                         tags=content.tags or [],
                         user_id=content.user_id,
                         is_public=content.is_public or False,
+                        raw_content=content.raw_content or "",
                     )
                     
                     if success:

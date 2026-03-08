@@ -44,5 +44,15 @@ class VectorDBConfig:
             logger.error(f"❌ Qdrant 설정 오류: {e}")
             raise
 
+    async def recreate_collection(self):
+        """기존 컬렉션을 삭제 후 새 구조로 재생성."""
+        try:
+            self.client.delete_collection(self.collection_name)
+            logger.info(f"🗑️ 기존 Qdrant 컬렉션 삭제: {self.collection_name}")
+        except Exception:
+            logger.info("삭제할 기존 컬렉션이 없거나 이미 비어 있습니다.")
+
+        await self.setup_collection()
+
 
 vector_db = VectorDBConfig()

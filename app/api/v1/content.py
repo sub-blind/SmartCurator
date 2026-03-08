@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
@@ -10,6 +12,7 @@ from app.models.user import User
 
 
 router = APIRouter(prefix="/contents", tags=["contents"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/", response_model=ContentRead)
@@ -28,7 +31,11 @@ async def create_content(
         content_type=content.content_type,
         is_public=content.is_public
     )
-    process_content_task.delay(new_content.id)
+    try:
+        process_content_task.delay(new_content.id)
+    except Exception as e:
+        # 본문 저장은 이미 성공했으므로 API는 정상 응답하고 로그로만 추적한다.
+        logger.error("백그라운드 큐 등록 실패: content_id=%s, error=%s", new_content.id, str(e))
     return new_content
 
 

@@ -1,30 +1,21 @@
+import asyncio
 import logging
-from celery import shared_task
+
 from app.core.celery_app import celery_app
-from app.core.database import async_session_maker
-from sqlalchemy import create_engine, select, update
-from sqlalchemy.orm import sessionmaker
-from app.core.config import settings
+from app.core.database_sync import SessionLocal
 from app.models.content import Content
+from app.services.scraper_service import ScraperService
+from app.services.ai_service import AIService
+from app.services.vector_service import vector_service
+from app.utils.text_chunking import split_into_chunks
 
 
 logger = logging.getLogger(__name__)
 
 
-# ⭐ 동기 DB 엔진 (Celery용 - asyncpg 안 씀)
-sync_engine = create_engine(
-    settings.DATABASE_URL,  # 동기 URL 사용
-    pool_size=5,
-    max_overflow=10,
-    pool_pre_ping=True,
-    pool_recycle=3600
-)
-SyncSessionLocal = sessionmaker(bind=sync_engine)
-
-
 @celery_app.task(bind=True, max_retries=2, default_retry_delay=30)
 def process_content_task(self, content_id: int):
-    """컨텐츠 처리 태스크 - 동기 래퍼"""
+    """컨텐츠 처리 태스크 (동기 + 별도 DB 세션 사용)"""
     try:
         logger.info(f"🚀 Celery 태스크 시작: content_id={content_id}")
         
@@ -44,98 +35,149 @@ def process_content_task(self, content_id: int):
             logger.error(f"💀 재시도 포기: content_id={content_id}")
             # 실패 상태 저장
             try:
-                session = SyncSessionLocal()
-                session.execute(
-                    update(Content)
-                    .where(Content.id == content_id)
-                    .values(status="failed")
-                )
-                session.commit()
+                session = SessionLocal()
+                content = session.get(Content, content_id)
+                if content:
+                    content.status = "failed"
+                    session.commit()
             except Exception as e:
                 logger.warning(f"실패 상태 업데이트 실패: {e}")
             finally:
-                session.close()
+                try:
+                    session.close()
+                except Exception:
+                    pass
             raise
 
 
 def _process_content_sync(content_id: int):
-    """동기 래퍼 - 비동기 메서드를 동기로 실행"""
-    from app.services.content_service import ContentService
-    from app.services.vector_service import vector_service
-    import asyncio
-    
-    # 새로운 이벤트 루프 생성
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    async_session = None
-    
+    """
+    Celery 워커에서 실행되는 동기 처리 파이프라인.
+    - 동기 DB 세션(SessionLocal) 사용
+    - 크롤링/AI 요약/벡터 저장은 async 함수이므로 asyncio.run 으로 감쌈
+    """
+    session = SessionLocal()
+    scraper = ScraperService()
+    ai_service = AIService()
+
     try:
         logger.info(f"🔄 컨텐츠 처리 시작: content_id={content_id}")
-        
-        # 비동기 세션 생성
-        from app.core.database import async_session_maker
-        
-        async def _async_process():
-            """비동기 처리 로직"""
-            nonlocal async_session
-            async_session = async_session_maker()
-            
-            try:
-                service = ContentService(async_session)
-                
-                # ⭐ 기존 비동기 메서드 사용
-                logger.info(f"🔄 process_content_async 호출: content_id={content_id}")
-                content = await service.process_content_async(content_id)
-                
-                logger.info(f"✅ 컨텐츠 처리 완료: {content.title}")
-                
-                # DB 커밋
-                await async_session.commit()
-                logger.info(f"💾 DB 커밋 완료")
-                
-                # 벡터 저장
-                if content.summary:
-                    logger.info(f"🔢 벡터 저장 시작: content_id={content_id}")
-                    await vector_service.store_content_vector(
-                        content_id=content.id,
-                        title=content.title,
-                        summary=content.summary,
-                        tags=content.tags or [],
-                        user_id=content.user_id,
-                        is_public=content.is_public
+
+        content = session.get(Content, content_id)
+        if not content:
+            logger.error(f"컨텐츠를 찾을 수 없음: content_id={content_id}")
+            return {"content_id": content_id, "status": "not_found"}
+
+        # 상태: processing
+        content.status = "processing"
+        session.commit()
+
+        # 1) URL 크롤링
+        if content.content_type == "url" and content.url:
+            logger.info(f"🌐 크롤링 시작: {content.url}")
+            scraped = asyncio.run(scraper.extract_content(content.url))
+            if scraped.get("success"):
+                content.raw_content = scraped.get("content")
+                if not content.title or content.title == "웹페이지":
+                    content.title = scraped.get("title", content.title)
+                logger.info(f"✅ 크롤링 완료: {len(content.raw_content or '')} chars")
+            else:
+                error_msg = scraped.get("error", "크롤링 실패")
+                logger.error(f"❌ 크롤링 실패: {error_msg}")
+                content.status = "failed"
+                session.commit()
+                return {"content_id": content_id, "status": "failed", "error": error_msg}
+
+        # 2) AI 요약 (chunk 기반 2단계)
+        if content.raw_content:
+            logger.info(f"🤖 AI 요약 시작: content_id={content_id}")
+            chunks = split_into_chunks(content.raw_content, chunk_size=1100, overlap=180)
+            chunk_summaries = []
+
+            for chunk in chunks or [content.raw_content]:
+                chunk_res = asyncio.run(
+                    ai_service.summarize_chunk(
+                        chunk,
+                        content.title or "",
+                        content.url or "",
                     )
-                    logger.info(f"✅ 벡터 저장 완료")
-                
-                return {
-                    "content_id": content_id,
-                    "status": "success",
-                    "title": content.title,
-                    "summary_length": len(content.summary) if content.summary else 0
-                }
-            finally:
-                if async_session:
-                    await async_session.close()
-        
-        # 비동기 함수 실행
-        result = loop.run_until_complete(_async_process())
-        return result
-        
+                )
+                if not chunk_res.get("success"):
+                    error_msg = chunk_res.get("error", "chunk 요약 실패")
+                    logger.error(f"❌ chunk 요약 실패: {error_msg}")
+                    content.status = "failed"
+                    session.commit()
+                    return {"content_id": content_id, "status": "failed", "error": error_msg}
+                chunk_summaries.append(chunk_res.get("summary", ""))
+
+            if len(chunk_summaries) == 1:
+                ai_res = asyncio.run(
+                    ai_service.summarize_content(
+                        content.raw_content,
+                        content.title or "",
+                        content.url or "",
+                    )
+                )
+            else:
+                ai_res = asyncio.run(
+                    ai_service.synthesize_chunk_summaries(
+                        title=content.title or "",
+                        url=content.url or "",
+                        chunk_summaries=chunk_summaries,
+                    )
+                )
+            if ai_res.get("success"):
+                content.summary = ai_res.get("summary")
+                content.tags = ai_res.get("tags", [])
+                content.status = "completed"
+                logger.info(
+                    f"✅ AI 요약 완료: {len(content.summary or '')} chars,"
+                    f" {len(content.tags or [])} tags"
+                )
+            else:
+                error_msg = ai_res.get("error", "AI 요약 실패")
+                logger.error(f"❌ AI 요약 실패: {error_msg}")
+                content.status = "failed"
+                session.commit()
+                return {"content_id": content_id, "status": "failed", "error": error_msg}
+
+        session.commit()
+
+        # 3) 벡터 저장 (요약이 성공한 경우)
+        if content.status == "completed" and content.summary:
+            logger.info(f"🔢 벡터 저장 시작: content_id={content_id}")
+            asyncio.run(
+                vector_service.store_content_chunks(
+                    content_id=content.id,
+                    title=content.title,
+                    summary=content.summary,
+                    tags=content.tags or [],
+                    user_id=content.user_id,
+                    is_public=content.is_public,
+                    raw_content=content.raw_content or "",
+                )
+            )
+            logger.info("✅ 벡터 저장 완료")
+
+        return {
+            "content_id": content_id,
+            "status": content.status,
+            "title": content.title,
+            "summary_length": len(content.summary or "") if content.summary else 0,
+        }
+
     except Exception as e:
         logger.error(f"❌ 처리 실패: content_id={content_id}, error={e}", exc_info=True)
-        raise
-        
-    finally:
-        # 루프 정리
         try:
-            pending = asyncio.all_tasks(loop)
-            for task in pending:
-                task.cancel()
-            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-        except:
-            pass
-        finally:
-            loop.close()
+            content = session.get(Content, content_id)
+            if content:
+                content.status = "failed"
+                session.commit()
+        except Exception:
+            logger.warning("실패 상태 업데이트 중 예외 발생", exc_info=True)
+        raise
+    finally:
+        session.close()
 
 
 @celery_app.task
