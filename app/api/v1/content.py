@@ -3,7 +3,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
-from app.core.database import get_async_session, get_db_session
+from app.core.database import get_db_session
 from app.core.dependencies import get_current_user
 from app.schemas.content import ContentCreate, ContentRead, ContentUpdate
 from app.services.content_service import ContentService
@@ -44,7 +44,7 @@ async def get_my_contents(
     skip: int = 0,
     limit: int = 20,
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_db_session)
 ):
     """현재 사용자 컨텐츠 목록 조회"""
     content_service = ContentService(session)
@@ -60,7 +60,7 @@ async def get_my_contents(
 async def get_content(
     content_id: int,
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_db_session)
 ):
     """특정 컨텐츠 상세 조회 및 접근 권한 체크"""
     content_service = ContentService(session)
@@ -77,7 +77,7 @@ async def update_content(
     content_id: int,
     content_update: ContentUpdate,
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_db_session)
 ):
     """컨텐츠 수정 (set된 필드만 업데이트)"""
     content_service = ContentService(session)
@@ -94,7 +94,7 @@ async def update_content(
 async def delete_content(
     content_id: int,
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_db_session)
 ):
     """컨텐츠 삭제 권한 확인 후 삭제 처리"""
     content_service = ContentService(session)
@@ -111,7 +111,7 @@ async def delete_content(
 async def reprocess_content(
     content_id: int,
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_db_session)
 ):
     """컨텐츠 요약 재처리 요청 (백그라운드 작업 위임)"""
     content_service = ContentService(session)

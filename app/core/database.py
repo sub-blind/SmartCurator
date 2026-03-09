@@ -27,13 +27,6 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
 
-# 추가: get_async_session (기존 코드 호환성)
-async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
-    """get_db_session과 동일 (호환성 유지)"""
-    async with async_session_maker() as session:
-        yield session
-
-
 async def init_db():
     """데이터베이스 초기화"""
     async with async_engine.begin() as conn:

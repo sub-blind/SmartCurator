@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.core.database import get_db_session, get_async_session
+from app.core.database import get_db_session
 from app.core.dependencies import get_current_user
 from app.models.user import User
 from app.schemas.auth import UserLogin, TokenResponse
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/register", response_model=UserRead)
 async def register(
     user: UserCreate,
-    session: AsyncSession = Depends(get_async_session),
+    session: AsyncSession = Depends(get_db_session),
 ):
     """회원 가입 - 이메일 중복 체크 후 신규 사용자 등록"""
     result = await session.execute(select(User).where(User.email == user.email))
@@ -58,7 +58,7 @@ async def read_me(
 @router.put("/profile", response_model=UserRead)
 async def update_profile(
     update: UserUpdate,
-    session: AsyncSession = Depends(get_async_session),
+    session: AsyncSession = Depends(get_db_session),
     current_user=Depends(get_current_user),
 ):
     """로그인 사용자 프로필 업데이트"""

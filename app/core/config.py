@@ -45,11 +45,6 @@ class Settings(BaseSettings):
     SIMILARITY_THRESHOLD: float = 0.6
     MAX_CONTEXT_LENGTH: int = 3000
 
-    # AI 어시스턴트 설정
-    AI_MODEL_NAME: str = "gpt-3.5-turbo"
-    MAX_RESPONSE_TOKENS: int = 1000
-    AI_TEMPERATURE: float = 0.7
-
     class Config:
         env_file = ".env"
         case_sensitive = False

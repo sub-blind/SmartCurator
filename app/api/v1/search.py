@@ -1,6 +1,4 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.database import get_db_session
 from app.core.dependencies import get_current_user
 from app.services.vector_service import vector_service
 from app.models.user import User
@@ -11,9 +9,8 @@ router = APIRouter(prefix="/search", tags=["search"])
 async def semantic_search(
     q: str = Query(..., description="검색 쿼리", min_length=2),
     limit: int = Query(10, ge=1, le=50, description="결과 개수"),
-    score_threshold: float = Query(0.4, ge=0.0, le=1.0, description="유사도 임계값"),
+    score_threshold: float = Query(0.30, ge=0.0, le=1.0, description="유사도 임계값"),
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db_session)
 
     
 ):
@@ -44,8 +41,7 @@ async def semantic_search(
 async def public_semantic_search(
     q: str = Query(..., description="검색 쿼리", min_length=2),
     limit: int = Query(10, ge=1, le=50, description="결과 개수"),
-    score_threshold: float = Query(0.4, ge=0.0, le=1.0, description="유사도 임계값"),
-    session: AsyncSession = Depends(get_db_session)
+    score_threshold: float = Query(0.30, ge=0.0, le=1.0, description="유사도 임계값"),
 ):
     """
     공개 컨텐츠 의미론적 검색

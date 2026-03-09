@@ -5,6 +5,7 @@ from typing import Dict, List, Optional
 
 from qdrant_client.http.models import FieldCondition, Filter, FilterSelector, MatchValue, PointStruct
 
+from app.core.config import settings
 from app.core.vector_config import vector_db
 from app.services.embedding_service import embedding_service
 from app.utils.text_chunking import split_into_chunks
@@ -13,19 +14,26 @@ logger = logging.getLogger(__name__)
 
 
 class VectorService:
-    """chunk 기반 벡터 저장, 검색, 관리 서비스"""
+    """Service for storing and searching chunk-based vectors."""
 
     def __init__(self):
         self.client = vector_db.client
         self.collection_name = vector_db.collection_name
 
     def _enhance_query(self, query: str) -> str:
-        """짧은 질의의 임베딩 품질을 높이기 위한 경량 쿼리 확장."""
+        """Light query expansion for very short user queries."""
         cleaned = (query or "").strip()
         if len(cleaned) < 2:
             return cleaned
         if len(cleaned) <= 4:
-            return f"{cleaned} 관련 뉴스/이슈 배경과 핵심 내용"
+            return f"{cleaned} 관련 이슈/정의 배경과 맥락 내용"
+        return cleaned
+
+    def _sanitize_query_for_log(self, text: str) -> str:
+        """Hide raw query text in production logs to reduce privacy risk."""
+        cleaned = (text or "").strip()
+        if settings.ENV.lower() == "production":
+            return f"[masked len={len(cleaned)}]"
         return cleaned
 
     async def store_content_chunks(
@@ -38,7 +46,7 @@ class VectorService:
         is_public: bool = False,
         raw_content: str = "",
     ) -> bool:
-        """컨텐츠 원문을 chunk 단위로 잘라 Qdrant에 저장한다."""
+        """Split content into chunks and upsert vectors to Qdrant."""
         try:
             await self.delete_content_vector(content_id)
 
@@ -51,7 +59,11 @@ class VectorService:
                 search_text = f"{title} {chunk_text} {' '.join(tags)}"
                 embedding = embedding_service.generate_embedding(search_text)
                 if not embedding or len(embedding) == 0 or sum(embedding) == 0:
-                    logger.warning(f"임베딩 생성 실패로 chunk 건너뜀: content_id={content_id}, chunk={index}")
+                    logger.warning(
+                        "Skip chunk due to empty embedding: content_id=%s, chunk=%s",
+                        content_id,
+                        index,
+                    )
                     continue
 
                 points.append(
@@ -72,7 +84,7 @@ class VectorService:
                 )
 
             if not points:
-                logger.error(f"❌ 저장할 chunk 벡터가 없음: content_id={content_id}")
+                logger.error("No vectors to upsert: content_id=%s", content_id)
                 return False
 
             self.client.upsert(
@@ -80,25 +92,30 @@ class VectorService:
                 points=points,
                 wait=True,
             )
-            logger.info(f"✅ chunk 벡터 저장: content_id={content_id}, chunk_count={len(points)}")
+            logger.info("Stored content vectors: content_id=%s, chunk_count=%s", content_id, len(points))
             return True
         except Exception as e:
-            logger.error(f"❌ chunk 벡터 저장 실패: content_id={content_id}, error={e}", exc_info=True)
+            logger.error("Failed to store vectors: content_id=%s, error=%s", content_id, e, exc_info=True)
             return False
 
     async def search_similar_chunks(
         self,
         query: str,
         user_id: Optional[int] = None,
-        limit: int = 8,
-        score_threshold: float = 0.45,
+        limit: int = 12,
+        score_threshold: float = 0.30,
+        fallback_threshold: float = 0.15,
+        query_enhance: bool = True,
     ) -> List[Dict]:
-        """chunk 단위 유사도 검색."""
+        """Search similar chunks with optional fallback threshold retry."""
         try:
-            enhanced_query = self._enhance_query(query)
+            cleaned_query = (query or "").strip()
+            should_enhance = query_enhance and len(cleaned_query) <= 4
+            enhanced_query = self._enhance_query(cleaned_query) if should_enhance else cleaned_query
+
             query_embedding = embedding_service.generate_embedding(enhanced_query)
             if not query_embedding or len(query_embedding) == 0 or sum(query_embedding) == 0:
-                logger.error("❌ 쿼리 임베딩 생성 실패")
+                logger.error("Failed to generate query embedding")
                 return []
 
             if user_id is not None:
@@ -110,7 +127,7 @@ class VectorService:
                     must=[FieldCondition(key="is_public", match=MatchValue(value=True))]
                 )
 
-            search_results = self.client.search(
+            initial_results = self.client.search(
                 collection_name=self.collection_name,
                 query_vector=query_embedding,
                 query_filter=search_filter,
@@ -118,22 +135,16 @@ class VectorService:
                 score_threshold=score_threshold,
             )
 
-            # 짧은 질의에서 결과가 없으면 threshold를 완화해 한 번 더 시도
-            if len(search_results) == 0:
-                relaxed_threshold = max(score_threshold - 0.15, 0.15)
+            fallback_used = False
+            search_results = initial_results
+            if len(initial_results) == 0:
+                fallback_used = True
                 search_results = self.client.search(
                     collection_name=self.collection_name,
                     query_vector=query_embedding,
                     query_filter=search_filter,
                     limit=limit,
-                    score_threshold=relaxed_threshold,
-                )
-                logger.info(
-                    "🔁 검색 재시도: query='%s', threshold %.2f -> %.2f, hits=%d",
-                    query,
-                    score_threshold,
-                    relaxed_threshold,
-                    len(search_results),
+                    score_threshold=fallback_threshold,
                 )
 
             results: List[Dict] = []
@@ -151,20 +162,33 @@ class VectorService:
                     }
                 )
 
-            logger.info(f"✅ chunk 검색 완료: '{query}' → {len(results)}개")
+            top_scores = [row["similarity_score"] for row in results[:limit]]
+            top1_score = top_scores[0] if top_scores else 0.0
+            avg_topk_score = sum(top_scores) / len(top_scores) if top_scores else 0.0
+
+            logger.info(
+                "RETRIEVAL_LOG query=%r enhanced_query=%r initial_hits=%d fallback_used=%s final_hits=%d top1_score=%.4f avg_topk_score=%.4f",
+                self._sanitize_query_for_log(cleaned_query),
+                self._sanitize_query_for_log(enhanced_query),
+                len(initial_results),
+                fallback_used,
+                len(results),
+                top1_score,
+                avg_topk_score,
+            )
             return results
         except Exception as e:
-            logger.error(f"❌ chunk 검색 실패: {e}", exc_info=True)
+            logger.error("Failed to search chunks: %s", e, exc_info=True)
             return []
 
     async def search_similar_contents(
         self,
         query: str,
         user_id: Optional[int] = None,
-        limit: int = 5,
-        score_threshold: float = 0.45,
+        limit: int = 6,
+        score_threshold: float = 0.30,
     ) -> List[Dict]:
-        """chunk 검색 결과를 content 단위로 묶어 반환한다."""
+        """Group chunk-level retrieval results into content-level results."""
         chunk_results = await self.search_similar_chunks(
             query=query,
             user_id=user_id,
@@ -205,7 +229,7 @@ class VectorService:
         return results[:limit]
 
     async def delete_content_vector(self, content_id: int) -> bool:
-        """컨텐츠 삭제 시 해당하는 모든 chunk 벡터를 삭제."""
+        """Delete all chunks for a specific content id."""
         try:
             search_filter = Filter(
                 must=[FieldCondition(key="content_id", match=MatchValue(value=content_id))]
@@ -214,10 +238,10 @@ class VectorService:
                 collection_name=self.collection_name,
                 points_selector=FilterSelector(filter=search_filter),
             )
-            logger.info(f"🗑️ 벡터 삭제: content_id={content_id}")
+            logger.info("Deleted vectors: content_id=%s", content_id)
             return True
         except Exception as e:
-            logger.error(f"❌ 벡터 삭제 실패: {e}")
+            logger.error("Failed to delete vectors: %s", e)
             return False
 
 
