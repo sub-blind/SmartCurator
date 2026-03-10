@@ -228,9 +228,15 @@ chunk 요약들:
             user_message=user_message,
             max_tokens=max_tokens,
             temperature=temperature,
+            force_json=True,
         )
         raw = response.choices[0].message.content or "{}"
-        return self._extract_json(raw)
+        try:
+            return self._extract_json(raw)
+        except json.JSONDecodeError as exc:
+            logger.warning(f"JSON 파싱 실패, 복구 시도: {exc}")
+            repaired_raw = await self._repair_json_with_llm(raw, max_tokens=max_tokens)
+            return self._extract_json(repaired_raw)
 
     async def _chat_completion(
         self,
@@ -238,29 +244,64 @@ chunk 요약들:
         user_message: str,
         max_tokens: int,
         temperature: float,
+        force_json: bool = False,
     ):
         if self.client:
-            return await self.client.chat.completions.create(
-                model=self.model_name,
-                messages=[
+            payload: Dict[str, Any] = {
+                "model": self.model_name,
+                "messages": [
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": user_message},
                 ],
-                max_tokens=max_tokens,
-                temperature=temperature,
-            )
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+            }
+            if force_json:
+                payload["response_format"] = {"type": "json_object"}
+            try:
+                return await self.client.chat.completions.create(**payload)
+            except Exception as e:
+                # 일부 모델/SDK 조합은 json response_format을 지원하지 않으므로 자동 폴백
+                if force_json and "response_format" in str(e):
+                    payload.pop("response_format", None)
+                    return await self.client.chat.completions.create(**payload)
+                raise
 
         import openai
 
-        return await openai.ChatCompletion.acreate(
-            model=self.model_name,
-            messages=[
+        payload = {
+            "model": self.model_name,
+            "messages": [
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": user_message},
             ],
-            max_tokens=max_tokens,
-            temperature=temperature,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        if force_json:
+            payload["response_format"] = {"type": "json_object"}
+        try:
+            return await openai.ChatCompletion.acreate(**payload)
+        except Exception as e:
+            if force_json and "response_format" in str(e):
+                payload.pop("response_format", None)
+                return await openai.ChatCompletion.acreate(**payload)
+            raise
+
+    async def _repair_json_with_llm(self, malformed_json: str, max_tokens: int) -> str:
+        repair_prompt = (
+            "아래 텍스트를 의미 변경 없이 유효한 JSON으로만 복구하세요. "
+            "설명, 코드펜스, 주석 없이 JSON 객체만 출력하세요.\n\n"
+            f"{malformed_json}"
         )
+        response = await self._chat_completion(
+            system_message="당신은 깨진 JSON을 복구하는 도우미입니다.",
+            user_message=repair_prompt,
+            max_tokens=min(max_tokens, 450),
+            temperature=0.0,
+            force_json=True,
+        )
+        return response.choices[0].message.content or "{}"
 
     def _extract_json(self, response: str) -> Dict[str, Any]:
         try:

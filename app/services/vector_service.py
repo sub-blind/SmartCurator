@@ -8,6 +8,7 @@ from qdrant_client.http.models import FieldCondition, Filter, FilterSelector, Ma
 from app.core.config import settings
 from app.core.vector_config import vector_db
 from app.services.embedding_service import embedding_service
+from app.utils.search_ranking import compute_hybrid_score
 from app.utils.text_chunking import split_into_chunks
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,14 @@ class VectorService:
     def __init__(self):
         self.client = vector_db.client
         self.collection_name = vector_db.collection_name
+        self._collection_ready = False
+
+    async def _ensure_collection(self) -> None:
+        """Qdrant 컬렉션이 없으면 자동 생성한다."""
+        if self._collection_ready:
+            return
+        await vector_db.setup_collection()
+        self._collection_ready = True
 
     def _enhance_query(self, query: str) -> str:
         """Light query expansion for very short user queries."""
@@ -48,6 +57,7 @@ class VectorService:
     ) -> bool:
         """Split content into chunks and upsert vectors to Qdrant."""
         try:
+            await self._ensure_collection()
             await self.delete_content_vector(content_id)
 
             chunks = split_into_chunks(raw_content or summary or title, chunk_size=1100, overlap=180)
@@ -103,12 +113,13 @@ class VectorService:
         query: str,
         user_id: Optional[int] = None,
         limit: int = 12,
-        score_threshold: float = 0.30,
-        fallback_threshold: float = 0.15,
+        score_threshold: float = 0.05,
+        fallback_threshold: float = 0.0,
         query_enhance: bool = True,
     ) -> List[Dict]:
         """Search similar chunks with optional fallback threshold retry."""
         try:
+            await self._ensure_collection()
             cleaned_query = (query or "").strip()
             should_enhance = query_enhance and len(cleaned_query) <= 4
             enhanced_query = self._enhance_query(cleaned_query) if should_enhance else cleaned_query
@@ -127,53 +138,80 @@ class VectorService:
                     must=[FieldCondition(key="is_public", match=MatchValue(value=True))]
                 )
 
+            candidate_limit = max(limit * 3, 12)
+
             initial_results = self.client.search(
                 collection_name=self.collection_name,
                 query_vector=query_embedding,
                 query_filter=search_filter,
-                limit=limit,
+                limit=candidate_limit,
                 score_threshold=score_threshold,
             )
 
             fallback_used = False
             search_results = initial_results
-            if len(initial_results) == 0:
+            if len(initial_results) < limit:
                 fallback_used = True
-                search_results = self.client.search(
+                relaxed_results = self.client.search(
                     collection_name=self.collection_name,
                     query_vector=query_embedding,
                     query_filter=search_filter,
-                    limit=limit,
+                    limit=candidate_limit,
                     score_threshold=fallback_threshold,
                 )
+                merged_results = []
+                seen_ids = set()
+                for result in [*initial_results, *relaxed_results]:
+                    if result.id in seen_ids:
+                        continue
+                    seen_ids.add(result.id)
+                    merged_results.append(result)
+                search_results = merged_results
 
             results: List[Dict] = []
             for result in search_results:
+                chunk_text = result.payload.get("chunk_text", "")
+                title = result.payload["title"]
+                tags = result.payload.get("tags", [])
+                ranking_text = f"{title} {chunk_text} {' '.join(tags)}"
                 results.append(
                     {
                         "content_id": result.payload["content_id"],
                         "chunk_index": result.payload.get("chunk_index", 0),
-                        "chunk_text": result.payload.get("chunk_text", ""),
-                        "title": result.payload["title"],
+                        "chunk_text": chunk_text,
+                        "title": title,
                         "summary": result.payload.get("summary", ""),
-                        "tags": result.payload.get("tags", []),
+                        "tags": tags,
                         "similarity_score": float(result.score),
+                        "hybrid_score": compute_hybrid_score(
+                            query=cleaned_query,
+                            text=ranking_text,
+                            similarity_score=float(result.score),
+                        ),
                         "user_id": result.payload["user_id"],
                     }
                 )
 
-            top_scores = [row["similarity_score"] for row in results[:limit]]
+            results.sort(
+                key=lambda row: (row["hybrid_score"], row["similarity_score"]),
+                reverse=True,
+            )
+            results = results[:limit]
+
+            top_scores = [row["similarity_score"] for row in results]
             top1_score = top_scores[0] if top_scores else 0.0
             avg_topk_score = sum(top_scores) / len(top_scores) if top_scores else 0.0
+            top1_hybrid_score = results[0]["hybrid_score"] if results else 0.0
 
             logger.info(
-                "RETRIEVAL_LOG query=%r enhanced_query=%r initial_hits=%d fallback_used=%s final_hits=%d top1_score=%.4f avg_topk_score=%.4f",
+                "RETRIEVAL_LOG query=%r enhanced_query=%r initial_hits=%d fallback_used=%s final_hits=%d top1_score=%.4f top1_hybrid_score=%.4f avg_topk_score=%.4f",
                 self._sanitize_query_for_log(cleaned_query),
                 self._sanitize_query_for_log(enhanced_query),
                 len(initial_results),
                 fallback_used,
                 len(results),
                 top1_score,
+                top1_hybrid_score,
                 avg_topk_score,
             )
             return results
@@ -186,7 +224,8 @@ class VectorService:
         query: str,
         user_id: Optional[int] = None,
         limit: int = 6,
-        score_threshold: float = 0.30,
+        score_threshold: float = 0.05,
+        min_output_score: float = 0.18,
     ) -> List[Dict]:
         """Group chunk-level retrieval results into content-level results."""
         chunk_results = await self.search_similar_chunks(
@@ -211,6 +250,7 @@ class VectorService:
                     "summary": item["summary"],
                     "tags": item["tags"],
                     "similarity_score": item["similarity_score"],
+                    "hybrid_score": item.get("hybrid_score", item["similarity_score"]),
                     "user_id": item["user_id"],
                 }
 
@@ -218,19 +258,27 @@ class VectorService:
         for content_id, meta in grouped.items():
             chunks = sorted(
                 grouped_chunks[content_id],
-                key=lambda row: row["similarity_score"],
+                key=lambda row: (row.get("hybrid_score", row["similarity_score"]), row["similarity_score"]),
                 reverse=True,
             )[:3]
             meta["matched_chunks"] = chunks
             meta["top_snippet"] = chunks[0]["chunk_text"] if chunks else ""
             results.append(meta)
 
-        results.sort(key=lambda row: row["similarity_score"], reverse=True)
-        return results[:limit]
+        results.sort(
+            key=lambda row: (row.get("hybrid_score", row["similarity_score"]), row["similarity_score"]),
+            reverse=True,
+        )
+        filtered_results = [
+            row for row in results
+            if row["similarity_score"] >= min_output_score
+        ]
+        return filtered_results[:limit]
 
     async def delete_content_vector(self, content_id: int) -> bool:
         """Delete all chunks for a specific content id."""
         try:
+            await self._ensure_collection()
             search_filter = Filter(
                 must=[FieldCondition(key="content_id", match=MatchValue(value=content_id))]
             )

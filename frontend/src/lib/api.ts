@@ -78,7 +78,7 @@ export const api = {
     }),
   semanticSearch: (query: string, token: string) =>
     smartFetch<SemanticSearchResponse>(
-      `/search/semantic?q=${encodeURIComponent(query)}&limit=6&score_threshold=0.30`,
+      `/search/semantic?q=${encodeURIComponent(query)}&limit=6`,
       {
         method: "GET",
         token
