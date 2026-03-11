@@ -86,16 +86,7 @@ class RAGService:
                     "confidence": 0.0,
                 }
 
-            sources = [
-                {
-                    "content_id": chunk["content_id"],
-                    "title": chunk["title"],
-                    "chunk_index": chunk["chunk_index"],
-                    "snippet": chunk["chunk_text"][:220],
-                    "similarity_score": round(chunk["similarity_score"], 3),
-                }
-                for chunk in visible_chunks[:5]
-            ]
+            sources = self._build_sources(visible_chunks)
             confidence = self._calculate_confidence(visible_chunks)
 
             latency_ms = int((perf_counter() - start_time) * 1000)
@@ -179,6 +170,24 @@ class RAGService:
             chunk for chunk in chunks
             if chunk.get("similarity_score", 0.0) >= self.min_visible_source_score
         ]
+
+    def _build_sources(self, chunks: List[Dict]) -> List[Dict]:
+        unique_sources: Dict[int, Dict] = {}
+        for chunk in chunks:
+            content_id = chunk["content_id"]
+            current = unique_sources.get(content_id)
+            if current is None or chunk["similarity_score"] > current["similarity_score"]:
+                unique_sources[content_id] = {
+                    "content_id": content_id,
+                    "title": chunk["title"],
+                    "chunk_index": chunk["chunk_index"],
+                    "snippet": chunk["chunk_text"][:220],
+                    "similarity_score": round(chunk["similarity_score"], 3),
+                }
+
+        sources = list(unique_sources.values())
+        sources.sort(key=lambda row: row["similarity_score"], reverse=True)
+        return sources[:5]
 
     def _calculate_confidence(self, contents: List[Dict]) -> float:
         if not contents:

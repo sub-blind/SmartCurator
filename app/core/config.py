@@ -1,11 +1,20 @@
+from typing import List, Optional
+
+from pydantic import Field
 from pydantic_settings import BaseSettings
-from typing import Optional
 
 
 class Settings(BaseSettings):
     # App Settings
     ENV: str = "development"
     DEBUG: bool = True
+    ALLOWED_ORIGINS: List[str] = Field(
+        default_factory=lambda: [
+            "http://localhost",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+        ]
+    )
 
     # Database
     DATABASE_URL: str  # 동기/기본 연결
@@ -33,6 +42,8 @@ class Settings(BaseSettings):
     OPENAI_TEMPERATURE: float = 0.3
 
     # 벡터 데이터베이스 설정
+    QDRANT_URL: Optional[str] = None
+    QDRANT_API_KEY: Optional[str] = None
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6333
 

@@ -2,10 +2,19 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { api } from "@/lib/api";
+
 import { useAuth } from "@/components/auth/auth-provider";
-import type { ChatAnswer, ContentItem, SearchResultItem } from "@/types/content";
 import { QuickAddForm } from "@/components/forms/quick-add-form";
+import { api } from "@/lib/api";
+import type { ChatAnswer, ContentItem, SearchResultItem } from "@/types/content";
+
+function truncateText(text: string, maxLength: number) {
+  const normalized = (text || "").replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxLength).trimEnd()}...`;
+}
 
 function StatusBadge({ status }: { status: ContentItem["status"] }) {
   const base = "inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium";
@@ -43,7 +52,7 @@ export default function DashboardPage() {
       const data = await api.getMyContents(token);
       setContents(data);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "컨텐츠를 불러오지 못했습니다.");
+      setMessage(err instanceof Error ? err.message : "콘텐츠를 불러오지 못했습니다.");
     } finally {
       setLoading(false);
     }
@@ -55,37 +64,6 @@ export default function DashboardPage() {
     }
   }, [initialized, token]);
 
-  if (!initialized) {
-    return <p className="text-sm text-slate-300">초기화 중입니다...</p>;
-  }
-
-  if (!token) {
-    return (
-      <div className="mx-auto max-w-md space-y-4 rounded-3xl border border-white/10 bg-slate-900/60 p-8 text-center shadow-card">
-        <h1 className="text-2xl font-semibold text-white">로그인이 필요합니다</h1>
-        <p className="mt-2 text-sm text-slate-300">
-          대시보드에서 내 컨텐츠를 관리하려면 먼저 로그인해 주세요.
-        </p>
-        <div className="mt-4 flex justify-center gap-3">
-          <Link
-            href="/login"
-            className="rounded-full bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-blue-500"
-          >
-            로그인
-          </Link>
-          <Link
-            href="/register"
-            className="rounded-full border border-white/15 px-4 py-2 text-sm font-medium text-slate-100 hover:border-brand"
-          >
-            회원가입
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  const hasContents = contents.length > 0;
-
   const handleSemanticSearch = async () => {
     if (!token || !searchQuery.trim()) return;
     setSearchLoading(true);
@@ -94,7 +72,7 @@ export default function DashboardPage() {
       const response = await api.semanticSearch(searchQuery.trim(), token);
       setSearchResults(response.results);
       if (response.results.length === 0) {
-        setSearchMessage("검색 결과가 없습니다. 다른 표현으로 다시 검색해보세요.");
+        setSearchMessage("검색 결과가 없습니다. 더 구체적인 키워드로 다시 검색해보세요.");
       }
     } catch (err) {
       setSearchMessage(err instanceof Error ? err.message : "검색에 실패했습니다.");
@@ -117,15 +95,44 @@ export default function DashboardPage() {
     }
   };
 
+  if (!initialized) {
+    return <p className="text-sm text-slate-300">초기화 중입니다...</p>;
+  }
+
+  if (!token) {
+    return (
+      <div className="mx-auto max-w-md space-y-4 rounded-3xl border border-white/10 bg-slate-900/60 p-8 text-center shadow-card">
+        <h1 className="text-2xl font-semibold text-white">로그인이 필요합니다</h1>
+        <p className="mt-2 text-sm text-slate-300">
+          대시보드에서는 저장한 콘텐츠, 검색, AI 어시스트 기능을 확인할 수 있습니다.
+        </p>
+        <div className="mt-4 flex justify-center gap-3">
+          <Link
+            href="/login"
+            className="rounded-full bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-blue-500"
+          >
+            로그인
+          </Link>
+          <Link
+            href="/register"
+            className="rounded-full border border-white/15 px-4 py-2 text-sm font-medium text-slate-100 hover:border-brand"
+          >
+            회원가입
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <section className="space-y-3 rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-card">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h1 className="text-xl font-semibold text-white">내 컨텐츠</h1>
+              <h1 className="text-xl font-semibold text-white">내 콘텐츠</h1>
               <p className="text-xs text-slate-300">
-                저장된 기사·노트들이 요약/태깅된 결과를 한눈에 확인할 수 있습니다.
+                저장한 기사와 노트의 처리 상태, 요약, 태그를 확인합니다.
               </p>
             </div>
             <button
@@ -139,9 +146,9 @@ export default function DashboardPage() {
           {loading && <p className="text-xs text-slate-400">불러오는 중...</p>}
           {message && <p className="text-xs text-red-300">{message}</p>}
           <div className="mt-2 space-y-3">
-            {!hasContents && !loading && (
+            {contents.length === 0 && !loading && (
               <p className="text-sm text-slate-400">
-                아직 저장된 컨텐츠가 없습니다. 오른쪽에서 첫 컨텐츠를 추가해 보세요.
+                아직 저장한 콘텐츠가 없습니다. 오른쪽 입력 폼에서 먼저 추가해보세요.
               </p>
             )}
             {contents.map((item) => (
@@ -179,7 +186,7 @@ export default function DashboardPage() {
                 </div>
                 {item.summary && (
                   <p className="mt-2 line-clamp-3 text-xs text-slate-200">
-                    {item.summary.length > 260 ? `${item.summary.slice(0, 260)}…` : item.summary}
+                    {truncateText(item.summary, 260)}
                   </p>
                 )}
                 {item.tags && item.tags.length > 0 && (
@@ -202,23 +209,21 @@ export default function DashboardPage() {
                         await api.reprocessContent(item.id, token);
                         setMessage("재처리 요청을 보냈습니다.");
                       } catch (err) {
-                        setMessage(
-                          err instanceof Error ? err.message : "재처리 요청에 실패했습니다.",
-                        );
+                        setMessage(err instanceof Error ? err.message : "재처리 요청에 실패했습니다.");
                       }
                     }}
                     className="rounded-full border border-white/15 px-3 py-1 text-[11px] text-slate-100 hover:border-blue-400"
                   >
-                    요약 재처리
+                    재처리
                   </button>
                   <button
                     type="button"
                     onClick={async () => {
-                      const ok = window.confirm("정말 이 컨텐츠를 삭제하시겠습니까?");
+                      const ok = window.confirm("이 콘텐츠를 삭제하시겠습니까?");
                       if (!ok) return;
                       try {
                         await api.deleteContent(item.id, token);
-                        setContents((prev) => prev.filter((c) => c.id !== item.id));
+                        setContents((prev) => prev.filter((content) => content.id !== item.id));
                       } catch (err) {
                         setMessage(err instanceof Error ? err.message : "삭제에 실패했습니다.");
                       }
@@ -235,9 +240,9 @@ export default function DashboardPage() {
 
         <section className="space-y-3 rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-card">
           <div>
-            <h2 className="text-lg font-semibold text-white">새 컨텐츠 추가</h2>
+            <h2 className="text-lg font-semibold text-white">콘텐츠 추가</h2>
             <p className="text-xs text-slate-300">
-              기사 URL이나 노트를 붙여넣으면 백엔드가 자동으로 요약과 태그를 생성합니다.
+              기사 URL이나 텍스트를 넣으면 백엔드가 요약, 태그, 벡터를 생성합니다.
             </p>
           </div>
           <QuickAddForm token={token} onCreated={loadContents} />
@@ -249,14 +254,14 @@ export default function DashboardPage() {
           <div>
             <h2 className="text-lg font-semibold text-white">의미론적 검색</h2>
             <p className="text-xs text-slate-300">
-              저장한 컨텐츠를 키워드가 아니라 의미 기준으로 검색합니다. 결과에는 매칭된 핵심 chunk 근거가 함께 표시됩니다.
+              저장한 콘텐츠를 키워드가 아니라 의미 기준으로 검색합니다. 결과는 짧은 핵심 snippet만 보여줍니다.
             </p>
           </div>
           <div className="flex gap-2">
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="예: LLM 에이전트 아키텍처"
+              placeholder="예: 로봇 투자, 덱스메이트, 흙의 날"
               className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-white focus:border-brand focus:outline-none"
             />
             <button
@@ -271,20 +276,29 @@ export default function DashboardPage() {
           {searchMessage && <p className="text-xs text-slate-300">{searchMessage}</p>}
           <div className="space-y-3">
             {searchResults.map((result) => (
-              <article key={result.content_id} className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+              <article
+                key={result.content_id}
+                className="rounded-2xl border border-white/10 bg-slate-950/60 p-4"
+              >
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="text-sm font-semibold text-white">{result.title}</h3>
                   <span className="text-[11px] text-blue-200">
                     score {result.similarity_score.toFixed(3)}
                   </span>
                 </div>
-                <p className="mt-2 text-xs text-slate-300">
-                  {result.top_snippet || result.summary || "매칭된 snippet이 없습니다."}
+                <p className="mt-2 line-clamp-3 text-xs text-slate-300">
+                  {truncateText(
+                    result.top_snippet || result.summary || "매칭된 snippet이 없습니다.",
+                    180,
+                  )}
                 </p>
                 {result.tags.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {result.tags.map((tag) => (
-                      <span key={tag} className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-200">
+                      <span
+                        key={tag}
+                        className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-200"
+                      >
                         #{tag}
                       </span>
                     ))}
@@ -299,7 +313,7 @@ export default function DashboardPage() {
           <div>
             <h2 className="text-lg font-semibold text-white">AI 어시스트</h2>
             <p className="text-xs text-slate-300">
-              저장된 기사와 노트의 chunk 근거를 바탕으로 질문에 답합니다.
+              저장한 기사와 노트의 근거 chunk를 바탕으로 질문에 답합니다.
             </p>
           </div>
           <div className="space-y-3">
@@ -307,7 +321,7 @@ export default function DashboardPage() {
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               rows={4}
-              placeholder="예: 내가 저장한 기사들 기준으로 RAG 구조를 설명해줘"
+              placeholder="예: LG CNS가 어디에 투자했어?, 흙의 날 기사 핵심만 정리해줘"
               className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-white focus:border-brand focus:outline-none"
             />
             <button
@@ -333,14 +347,19 @@ export default function DashboardPage() {
                 <div className="space-y-2">
                   <p className="text-xs font-medium text-slate-300">근거 출처</p>
                   {chatAnswer.sources.map((source, index) => (
-                    <div key={`${source.content_id}-${source.chunk_index}-${index}`} className="rounded-xl border border-white/10 bg-slate-900/70 p-3">
+                    <div
+                      key={`${source.content_id}-${source.chunk_index}-${index}`}
+                      className="rounded-xl border border-white/10 bg-slate-900/70 p-3"
+                    >
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-xs font-medium text-white">{source.title}</p>
                         <span className="text-[11px] text-slate-400">
                           chunk {source.chunk_index} · {source.similarity_score.toFixed(3)}
                         </span>
                       </div>
-                      <p className="mt-1 text-xs text-slate-300">{source.snippet}</p>
+                      <p className="mt-1 text-xs text-slate-300">
+                        {truncateText(source.snippet, 180)}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -352,4 +371,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
