@@ -6,7 +6,7 @@ type FetchOptions = {
   token?: string;
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/+$/, "");
 
 async function smartFetch<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
   const { method = "GET", body, token } = options;

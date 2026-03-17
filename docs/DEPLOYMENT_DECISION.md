@@ -1,54 +1,54 @@
-# Deployment Decision
+# 배포 구조 결정
 
-## Recommended Architecture
+## 권장 아키텍처
 
-- Frontend: Vercel
-- Backend API: Render Web Service
+- 프론트엔드: Vercel
+- 백엔드 API: Render Web Service
 - Celery Worker: Render Background Worker
-- PostgreSQL: Render PostgreSQL or Railway PostgreSQL
-- Redis: Render Key Value or Railway Redis
+- PostgreSQL: Render PostgreSQL 또는 Railway PostgreSQL
+- Redis: Render Key Value 또는 Railway Redis
 - Qdrant: Qdrant Cloud
 
-## Why This Fits This Project
+## 이 구조를 선택한 이유
 
-- The frontend is a standard Next.js 14 app and fits Vercel well.
-- The backend is a long-running FastAPI service and needs stable Python process hosting.
-- Celery must run as a separate background process from the API.
-- PostgreSQL and Redis are standard managed dependencies and do not need custom ops work.
-- Qdrant is the least convenient part to self-host for a small portfolio deploy, so managed Qdrant is the safest choice.
+- 프론트엔드는 표준 Next.js 14 앱이라 Vercel에 가장 적합하다.
+- 백엔드는 장시간 실행되는 FastAPI 서비스이므로 안정적인 Python 프로세스 호스팅이 필요하다.
+- Celery는 API와 별도의 백그라운드 프로세스로 실행되어야 한다.
+- PostgreSQL과 Redis는 표준 매니지드 서비스로 충분하며, 별도 운영 작업이 필요 없다.
+- Qdrant는 소규모 포트폴리오 배포에서 직접 호스팅하기 가장 번거로우므로 매니지드가 안전하다.
 
-## Deployment Split
+## 배포 구성
 
-### Frontend
+### 프론트엔드
 
-- Platform: Vercel
-- Build command: `npm run build`
-- Runtime env:
+- 플랫폼: Vercel
+- 빌드 명령어: `npm run build`
+- 환경 변수:
   - `NEXT_PUBLIC_API_BASE_URL`
 
-### Backend API
+### 백엔드 API
 
-- Platform: Render Web Service
-- Start command:
+- 플랫폼: Render Web Service
+- 실행 명령어:
   - `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-- Predeploy / first setup:
+- 최초 배포 시 / 사전 설정:
   - `pip install -r requirements.txt`
   - `alembic upgrade head`
   - `python init_vector_db.py`
 
 ### Celery Worker
 
-- Platform: Render Background Worker
-- Start command:
+- 플랫폼: Render Background Worker
+- 실행 명령어:
   - `celery -A app.core.celery_app worker --loglevel=info`
 
-### Data Services
+### 데이터 서비스
 
-- PostgreSQL: managed
-- Redis: managed
-- Qdrant: managed
+- PostgreSQL: 매니지드
+- Redis: 매니지드
+- Qdrant: 매니지드
 
-## Required Backend Environment Variables
+## 백엔드 필수 환경 변수
 
 - `ENV`
 - `DEBUG`
@@ -60,43 +60,43 @@
 - `OPENAI_MODEL`
 - `CELERY_BROKER_URL`
 - `CELERY_RESULT_BACKEND`
-- `QDRANT_URL` or `QDRANT_HOST` + `QDRANT_PORT`
-- `QDRANT_API_KEY` if using Qdrant Cloud
+- `QDRANT_URL` 또는 `QDRANT_HOST` + `QDRANT_PORT`
+- `QDRANT_API_KEY` (Qdrant Cloud 사용 시)
 
-Notes:
+참고:
 
-- `DATABASE_URL` must be the sync driver for Celery and Alembic.
-- `ASYNC_DATABASE_URL` must explicitly use `postgresql+asyncpg://...` for FastAPI.
-- Do not leave async DB resolution to implicit conversion in production.
+- `DATABASE_URL`은 Celery와 Alembic용 동기 드라이버여야 한다.
+- `ASYNC_DATABASE_URL`은 FastAPI용으로 반드시 `postgresql+asyncpg://...` 형식이어야 한다.
+- 운영 환경에서는 비동기 DB URL을 암묵적 변환에 맡기지 말고 명시적으로 지정할 것.
 
-## Required Frontend Environment Variables
+## 프론트엔드 필수 환경 변수
 
 - `NEXT_PUBLIC_API_BASE_URL`
 
-## CORS Rule
+## CORS 규칙
 
-- `ALLOWED_ORIGINS` must include the deployed frontend URL.
-- Example:
+- `ALLOWED_ORIGINS`에 배포된 프론트엔드 URL이 반드시 포함되어야 한다.
+- 예시:
   - `["http://localhost:3000","https://your-frontend.vercel.app"]`
 
-## Minimal Deploy Order
+## 최소 배포 순서
 
-1. Provision PostgreSQL, Redis, and Qdrant.
-2. Set backend environment variables.
-3. Deploy backend API.
-4. Run migrations and initialize Qdrant collection.
-5. Deploy Celery worker.
-6. Deploy frontend with deployed API base URL.
-7. Verify `/health`, login, content create, search, and AI assist.
+1. PostgreSQL, Redis, Qdrant 프로비저닝
+2. 백엔드 환경 변수 설정
+3. 백엔드 API 배포
+4. DB 마이그레이션 실행 및 Qdrant 컬렉션 초기화
+5. Celery Worker 배포
+6. 프론트엔드 배포 (배포된 API base URL 설정)
+7. `/health`, 로그인, 콘텐츠 생성, 검색, AI 어시스트 검증
 
-## Operational Notes
+## 운영 참고사항
 
-- If Qdrant is empty after deploy, run `python scripts/reindex_vectors.py`.
-- If content stays in `pending`, check Celery worker logs and Redis connection.
-- If frontend login works but API calls fail, check `NEXT_PUBLIC_API_BASE_URL` and `ALLOWED_ORIGINS`.
-- If you keep the current `.env` file in git-ignored local storage, rotate any leaked API keys before deploy.
+- 배포 후 Qdrant가 비어 있으면 `python scripts/reindex_vectors.py` 실행
+- 콘텐츠가 `pending` 상태에서 멈추면 Celery Worker 로그와 Redis 연결 확인
+- 프론트에서 로그인은 되는데 API 호출이 실패하면 `NEXT_PUBLIC_API_BASE_URL`과 `ALLOWED_ORIGINS` 확인
+- 로컬 `.env` 파일을 git-ignored로 유지하고 있다면, 배포 전에 유출된 API 키가 없는지 확인 후 교체
 
-## Decision Status
+## 결정 상태
 
-- Chosen default for this project: `Vercel + Render + managed Postgres/Redis + Qdrant Cloud`
-- Reason: lowest ops complexity while preserving separate API and worker processes.
+- 이 프로젝트의 기본 배포 구성: `Vercel + Render + 매니지드 Postgres/Redis + Qdrant Cloud`
+- 이유: API와 Worker 프로세스를 분리하면서도 운영 복잡도가 가장 낮은 조합

@@ -1,6 +1,7 @@
+import json
 from typing import List, Optional
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -15,6 +16,7 @@ class Settings(BaseSettings):
             "http://127.0.0.1:3000",
         ]
     )
+    ALLOWED_ORIGIN_REGEX: Optional[str] = None
 
     # Database
     DATABASE_URL: str  # 동기/기본 연결
@@ -59,6 +61,28 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = False
+
+    @field_validator("ALLOWED_ORIGINS", mode="before")
+    @classmethod
+    def parse_allowed_origins(cls, value):
+        """Allow JSON array or comma-separated origins in env values."""
+        if isinstance(value, list):
+            return value
+        if isinstance(value, str):
+            raw = value.strip()
+            if not raw:
+                return []
+
+            if raw.startswith("["):
+                try:
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, list):
+                        return [str(origin).strip() for origin in parsed if str(origin).strip()]
+                except json.JSONDecodeError:
+                    pass
+
+            return [origin.strip() for origin in raw.split(",") if origin.strip()]
+        return value
 
     @property
     def async_database_url(self) -> str:
