@@ -482,3 +482,36 @@ curl -X DELETE http://localhost:8000/contents/{id} \
 - 짧은 검색 질의 품질을 어떤 방식으로 개선했나요?
 - 콘텐츠 등록 후 어떤 비동기 처리 단계가 실행되나요?
 - 이 프로젝트의 핵심 기능을 요약해줘
+
+---
+
+## Phase 11: 외부 배포 검증 (Cloudflare Tunnel + Vercel)
+
+로컬 서비스가 정상 동작한 뒤 외부 공개 및 프론트 연동을 검증합니다.
+
+### 11-1. Cloudflare Tunnel 실행
+
+```bash
+cloudflared tunnel --url http://localhost:8000
+```
+
+출력 URL 예시: `https://xxxx-xxxx-xxxx.trycloudflare.com`
+
+### 11-2. 터널 헬스 체크
+
+```bash
+curl https://xxxx-xxxx-xxxx.trycloudflare.com/health
+```
+
+**기대 결과**: `status: healthy`
+
+### 11-3. Vercel 프론트 접속
+
+- 브라우저에서 Vercel 배포 URL (`https://your-app.vercel.app`) 접속
+- 회원가입/로그인 가능 여부 확인
+- 콘텐츠 추가 → 처리 완료 → 검색 → AI 어시스트 순서로 검증
+
+### 11-4. CORS 오류 발생 시
+
+- 백엔드 `.env`의 `ALLOWED_ORIGINS`에 Vercel 도메인이 포함되어 있는지 확인
+- 수정 후 백엔드 재시작

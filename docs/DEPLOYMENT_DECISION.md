@@ -1,102 +1,137 @@
 # 배포 구조 결정
 
-## 권장 아키텍처
+## 현재 운영 방식: 로컬 백엔드 + Cloudflare Tunnel + Vercel
 
-- 프론트엔드: Vercel
-- 백엔드 API: Render Web Service
-- Celery Worker: Render Background Worker
-- PostgreSQL: Render PostgreSQL 또는 Railway PostgreSQL
-- Redis: Render Key Value 또는 Railway Redis
-- Qdrant: Qdrant Cloud
+한국어 특화 임베딩 모델(`jhgan/ko-sroberta-multitask`)의 높은 검색 품질을 유지하면서
+인프라 비용을 최소화하기 위해, 로컬 환경의 충분한 메모리와 연산 자원을 활용하는 구조를 채택했습니다.
+Cloudflare Tunnel을 통해 외부 공개가 가능하므로 별도 클라우드 서버 없이도 데모 접근이 가능합니다.
 
-## 이 구조를 선택한 이유
+## 아키텍처
 
-- 프론트엔드는 표준 Next.js 14 앱이라 Vercel에 가장 적합하다.
-- 백엔드는 장시간 실행되는 FastAPI 서비스이므로 안정적인 Python 프로세스 호스팅이 필요하다.
-- Celery는 API와 별도의 백그라운드 프로세스로 실행되어야 한다.
-- PostgreSQL과 Redis는 표준 매니지드 서비스로 충분하며, 별도 운영 작업이 필요 없다.
-- Qdrant는 소규모 포트폴리오 배포에서 직접 호스팅하기 가장 번거로우므로 매니지드가 안전하다.
+| Component | Where | Cost |
+|-----------|-------|------|
+| Frontend | Vercel (Free) | Free |
+| Backend API | Local (`uvicorn`) | Free |
+| Celery Worker | Local | Free |
+| PostgreSQL | Local Docker | Free |
+| Redis | Local Docker | Free |
+| Qdrant | Local Docker (or Qdrant Cloud Free) | Free |
+| Public Access | Cloudflare Tunnel (or ngrok) | Free |
 
-## 배포 구성
+## 배포 순서 (처음부터 끝까지)
 
-### 프론트엔드
+### 1단계: Cloudflare Tunnel 설치
 
-- 플랫폼: Vercel
-- 빌드 명령어: `npm run build`
-- 환경 변수:
-  - `NEXT_PUBLIC_API_BASE_URL`
+```bash
+# Windows (winget)
+winget install cloudflare.cloudflared
 
-### 백엔드 API
+# 또는 https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/ 에서 직접 다운로드
+```
 
-- 플랫폼: Render Web Service
-- 실행 명령어:
-  - `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-- 최초 배포 시 / 사전 설정:
-  - `pip install -r requirements.txt`
-  - `alembic upgrade head`
-  - `python init_vector_db.py`
+### 2단계: 로컬 서비스 기동
 
-### Celery Worker
+```bash
+# Docker 컨테이너 시작
+docker start smartcurator-redis smartcurator-qdrant smartcurator-postgres
 
-- 플랫폼: Render Background Worker
-- 실행 명령어:
-  - `celery -A app.core.celery_app worker --loglevel=info`
+# 또는 처음이라면
+docker run -d --name smartcurator-redis -p 6379:6379 redis:latest
+docker run -d --name smartcurator-qdrant -p 6333:6333 qdrant/qdrant:latest
+docker run -d --name smartcurator-postgres -p 5432:5432 -e POSTGRES_PASSWORD=password -e POSTGRES_DB=smartcurator postgres:15
+```
 
-### 데이터 서비스
+```bash
+# 터미널 1: 백엔드
+.\venv\Scripts\activate
+pip install -r requirements.txt
+alembic upgrade head
+python init_vector_db.py
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
 
-- PostgreSQL: 매니지드
-- Redis: 매니지드
-- Qdrant: 매니지드
+```bash
+# 터미널 2: Celery Worker
+.\venv\Scripts\activate
+celery -A app.core.celery_app worker --loglevel=info --pool=solo --concurrency=1
+```
 
-## 백엔드 필수 환경 변수
+### 3단계: 터널 실행
 
-- `ENV`
-- `DEBUG`
-- `ALLOWED_ORIGINS`
-- `DATABASE_URL`
-- `ASYNC_DATABASE_URL`
-- `SECRET_KEY`
-- `OPENAI_API_KEY`
-- `OPENAI_MODEL`
-- `CELERY_BROKER_URL`
-- `CELERY_RESULT_BACKEND`
-- `QDRANT_URL` 또는 `QDRANT_HOST` + `QDRANT_PORT`
-- `QDRANT_API_KEY` (Qdrant Cloud 사용 시)
+```bash
+# 터미널 3: Cloudflare Tunnel
+cloudflared tunnel --url http://localhost:8000
+```
 
-참고:
+출력에서 `https://xxxx-xxxx-xxxx.trycloudflare.com` 형태의 URL을 복사합니다.
 
-- `DATABASE_URL`은 Celery와 Alembic용 동기 드라이버여야 한다.
-- `ASYNC_DATABASE_URL`은 FastAPI용으로 반드시 `postgresql+asyncpg://...` 형식이어야 한다.
-- 운영 환경에서는 비동기 DB URL을 암묵적 변환에 맡기지 말고 명시적으로 지정할 것.
+### 4단계: 프론트엔드 배포 (Vercel)
 
-## 프론트엔드 필수 환경 변수
+1. https://vercel.com 에서 GitHub 레포 Import
+2. Root Directory: `frontend`
+3. 환경 변수 설정:
+   - `NEXT_PUBLIC_API_BASE_URL` = 3단계에서 받은 터널 URL
+4. Deploy
 
-- `NEXT_PUBLIC_API_BASE_URL`
+### 5단계: 백엔드 CORS 설정
 
-## CORS 규칙
+`.env`의 `ALLOWED_ORIGINS`에 Vercel 도메인을 추가합니다:
 
-- `ALLOWED_ORIGINS`에 배포된 프론트엔드 URL이 반드시 포함되어야 한다.
-- 예시:
-  - `["http://localhost:3000","https://your-frontend.vercel.app"]`
+```env
+ALLOWED_ORIGINS=["http://localhost:3000","https://your-app.vercel.app"]
+```
 
-## 최소 배포 순서
+백엔드를 재시작하면 CORS가 적용됩니다.
 
-1. PostgreSQL, Redis, Qdrant 프로비저닝
-2. 백엔드 환경 변수 설정
-3. 백엔드 API 배포
-4. DB 마이그레이션 실행 및 Qdrant 컬렉션 초기화
-5. Celery Worker 배포
-6. 프론트엔드 배포 (배포된 API base URL 설정)
-7. `/health`, 로그인, 콘텐츠 생성, 검색, AI 어시스트 검증
+### 6단계: 검증
+
+- `https://<터널URL>/health` → 200 확인
+- Vercel 프론트에서 회원가입/로그인
+- 콘텐츠 추가 → Celery 처리 완료 확인
+- 의미론적 검색 테스트
+- AI 어시스트 테스트
+
+## 백엔드 환경 변수
+
+| Variable | Description |
+|----------|-------------|
+| `ENV` | `development` or `production` |
+| `DEBUG` | `True` or `False` |
+| `DATABASE_URL` | Sync driver (`postgresql+psycopg2://...`) |
+| `ASYNC_DATABASE_URL` | Async driver (`postgresql+asyncpg://...`) |
+| `SECRET_KEY` | Random long string |
+| `OPENAI_API_KEY` | OpenAI API key |
+| `OPENAI_MODEL` | `gpt-3.5-turbo` |
+| `CELERY_BROKER_URL` | `redis://localhost:6379/0` |
+| `CELERY_RESULT_BACKEND` | `redis://localhost:6379/1` |
+| `QDRANT_HOST` | `localhost` (Local Docker) |
+| `QDRANT_PORT` | `6333` |
+| `ALLOWED_ORIGINS` | JSON array string |
+
+Qdrant Cloud 사용 시 `QDRANT_URL` + `QDRANT_API_KEY`로 대체합니다.
+
+## 프론트엔드 환경 변수
+
+| Variable | Description |
+|----------|-------------|
+| `NEXT_PUBLIC_API_BASE_URL` | Tunnel URL or custom domain |
 
 ## 운영 참고사항
 
-- 배포 후 Qdrant가 비어 있으면 `python scripts/reindex_vectors.py` 실행
-- 콘텐츠가 `pending` 상태에서 멈추면 Celery Worker 로그와 Redis 연결 확인
-- 프론트에서 로그인은 되는데 API 호출이 실패하면 `NEXT_PUBLIC_API_BASE_URL`과 `ALLOWED_ORIGINS` 확인
-- 로컬 `.env` 파일을 git-ignored로 유지하고 있다면, 배포 전에 유출된 API 키가 없는지 확인 후 교체
+- 노트북이 꺼지거나 네트워크가 끊기면 서비스가 중단됩니다.
+- Cloudflare Tunnel 무료 모드(`trycloudflare.com`)는 재시작 시 URL이 바뀝니다.
+  - 고정 URL이 필요하면 Cloudflare Zero Trust에서 Named Tunnel을 설정하거나 커스텀 도메인을 연결합니다.
+- Qdrant가 비어 있으면 `python scripts/reindex_vectors.py`를 실행합니다.
+- 콘텐츠가 `pending`에서 멈추면 Celery 로그와 Redis 연결을 확인합니다.
+- 노트북 절전/자동 꺼짐을 반드시 해제해야 합니다.
 
-## 결정 상태
+## 클라우드 전환 경로
 
-- 이 프로젝트의 기본 배포 구성: `Vercel + Render + 매니지드 Postgres/Redis + Qdrant Cloud`
-- 이유: API와 Worker 프로세스를 분리하면서도 운영 복잡도가 가장 낮은 조합
+트래픽 증가 또는 상시 가용성이 필요해질 경우:
+
+- Frontend: Vercel
+- Backend API: Render Web Service or AWS ECS
+- Celery Worker: Render Background Worker or AWS ECS
+- PostgreSQL: Render PostgreSQL / AWS RDS
+- Redis: Render Key Value / AWS ElastiCache
+- Qdrant: Qdrant Cloud

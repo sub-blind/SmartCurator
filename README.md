@@ -227,45 +227,45 @@ python scripts/reindex_vectors.py
 
 ## 배포 구성
 
-현재 권장 배포 구조:
+현재 배포 구성: **Local Backend + Cloudflare Tunnel + Vercel Frontend**
 
-- Frontend: Vercel
-- Backend API: Render Web Service
-- Celery Worker: Render Background Worker
-- PostgreSQL: Render PostgreSQL 또는 Railway PostgreSQL
-- Redis: Render Key Value 또는 Railway Redis
-- Qdrant: Qdrant Cloud
+| Component | Where | Cost |
+| --------- | ----- | ---- |
+| Frontend | Vercel (Free) | Free |
+| Backend API | Local (`uvicorn`) | Free |
+| Celery Worker | Local | Free |
+| PostgreSQL | Local Docker | Free |
+| Redis | Local Docker | Free |
+| Qdrant | Local Docker (or Qdrant Cloud Free) | Free |
+| Public Access | Cloudflare Tunnel | Free |
 
-백엔드 시작 명령:
-
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port $PORT
-```
-
-Celery 워커 시작 명령:
-
-```bash
-celery -A app.core.celery_app worker --loglevel=info
-```
-
-배포 시 필수 설정:
-
-- `DATABASE_URL`과 `ASYNC_DATABASE_URL` 모두 설정
-- `ALLOWED_ORIGINS`를 JSON 배열 문자열로 설정
-- Qdrant Cloud 사용 시 `QDRANT_URL`과 `QDRANT_API_KEY` 설정
-- API와 워커가 동일한 DB, Redis, OpenAI, Qdrant 환경 변수를 공유해야 합니다
+한국어 특화 임베딩 모델(`jhgan/ko-sroberta-multitask`)의 높은 검색 품질을 유지하면서
+인프라 비용을 최소화하기 위해, 로컬 환경의 충분한 메모리와 연산 자원을 활용하는 구조를 채택했습니다.
 
 자세한 내용은 [docs/DEPLOYMENT_DECISION.md](docs/DEPLOYMENT_DECISION.md)를 참고하세요.
 
+## 외부 공개 (Cloudflare Tunnel)
+
+로컬 백엔드를 외부에서 접근할 수 있도록 터널을 사용합니다.
+
+```bash
+# Cloudflare Tunnel 설치 후
+cloudflared tunnel --url http://localhost:8000
+```
+
+터널이 부여한 공개 URL을 다음 위치에 반영합니다:
+
+- Vercel 환경 변수: `NEXT_PUBLIC_API_BASE_URL=<터널 URL>`
+- 백엔드 `.env`: `ALLOWED_ORIGINS`에 Vercel 도메인 추가
+
 ## 보안 참고
 
-실제 `OPENAI_API_KEY`가 로컬 `.env`에 저장되어 있다면 배포 전에 반드시 교체하세요.
-최소 절차:
-
-1. OpenAI 대시보드에서 새 API 키를 생성합니다.
-2. 로컬 `.env` 값을 교체합니다.
-3. 배포 플랫폼의 환경 변수를 업데이트합니다.
-4. 이전 키를 삭제합니다.
+- API 키와 DB 비밀번호가 유출되지 않도록 `.env`는 반드시 `.gitignore`에 포함합니다.
+- 키 교체 절차:
+  1. 새 키를 발급합니다 (OpenAI, Qdrant 등).
+  2. `.env` 값을 교체합니다.
+  3. 서비스를 재시작합니다.
+  4. 이전 키를 삭제합니다.
 
 ## 디렉터리 구조
 
