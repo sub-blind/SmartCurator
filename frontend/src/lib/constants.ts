@@ -24,19 +24,19 @@ export const architectureMap = [
 
 export const buildSteps = [
   {
-    title: "문제 정의",
+    title: "핵심 기능",
     detail: "링크/노트가 흩어져 복습이 어렵다는 문제를 수집-요약-검색-질의 흐름으로 통합",
     evidence: "URL, 텍스트, 파일(PDF/TXT) 입력을 하나의 파이프라인으로 처리"
   },
   {
-    title: "핵심 구현",
+    title: "설계 포인트",
     detail: "비동기 요약 파이프라인, 의미론 검색, RAG 기반 Q&A, 재처리/삭제 운영 기능 구현",
     evidence: "대시보드에서 상태 변화(pending->processing->completed)와 결과를 즉시 확인 가능"
   },
   {
-    title: "운영 관점",
-    detail: "세션 만료 안내, 모바일 가독성 개선, 요약 전체보기 등 사용자 중심 개선 반영",
-    evidence: "실사용 피드백 기반 UX 수정과 배포 환경(CORS/터널)까지 검증 완료"
+    title: "운영 기준",
+    detail: "세션 만료 안내, 모바일 가독성 개선, 요약 전체보기 등 사용자 경험 중심 운영 기준을 적용",
+    evidence: "배포 환경(CORS/터널) 검증과 상태 기반 처리 흐름으로 운영 가시성 확보"
   },
   {
     title: "확장 계획",

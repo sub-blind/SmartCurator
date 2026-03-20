@@ -11,8 +11,8 @@ export function QuickActionsSection() {
   return (
     <Section
       id="quick-start"
-      title="라이브 데모"
-      description="면접 시 바로 시연할 수 있게 로그인과 콘텐츠 등록을 한 화면에서 수행합니다."
+      title="빠른 사용 가이드"
+      description="로그인과 콘텐츠 등록을 한 화면에서 수행해 전체 흐름을 빠르게 확인할 수 있습니다."
     >
       <div className="grid gap-6 lg:grid-cols-2">
         <LoginCard onTokenReady={setToken} />

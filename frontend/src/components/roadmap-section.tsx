@@ -4,9 +4,9 @@ import { buildSteps } from "@/lib/constants";
 export function RoadmapSection() {
   return (
     <Section
-      id="interview-summary"
-      title="면접관용 프로젝트 요약"
-      description="기술 선택보다 '왜 만들었고, 어떻게 검증했고, 어디까지 운영 가능한지'를 중심으로 핵심 포인트를 정리했습니다."
+      id="project-summary"
+      title="프로젝트 핵심 정리"
+      description="문제 정의, 구현 범위, 운영 기준, 확장 계획을 간단히 정리했습니다."
     >
       <ol className="space-y-4">
         {buildSteps.map((step, index) => (

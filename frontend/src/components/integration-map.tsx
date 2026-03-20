@@ -5,8 +5,8 @@ export function IntegrationMap() {
   return (
     <Section
       id="architecture"
-      title="아키텍처 의사결정 요약"
-      description="면접관이 빠르게 이해할 수 있도록, 구현 과정에서의 핵심 선택과 트레이드오프를 한 화면에 정리했습니다."
+      title="구현 결정 기록"
+      description="구현 과정에서의 핵심 선택과 트레이드오프를 한 화면에 정리했습니다."
       className="glass-card"
     >
       <div className="space-y-4">
