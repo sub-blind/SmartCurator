@@ -16,6 +16,8 @@ from app.models.user import User
 router = APIRouter(prefix="/contents", tags=["contents"])
 logger = logging.getLogger(__name__)
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_PDF_PAGES = 20
+MAX_EXTRACTED_CHARS = 120_000
 
 
 @router.post("/", response_model=ContentRead)
@@ -65,7 +67,9 @@ async def upload_content_file(
     try:
         if content_type == "pdf":
             reader = PdfReader(BytesIO(raw_bytes))
-            extracted_pages = [(page.extract_text() or "").strip() for page in reader.pages]
+            extracted_pages = [
+                (page.extract_text() or "").strip() for page in reader.pages[:MAX_PDF_PAGES]
+            ]
             extracted_text = "\n\n".join(part for part in extracted_pages if part)
         else:
             extracted_text = raw_bytes.decode("utf-8", errors="ignore").strip()
@@ -74,6 +78,8 @@ async def upload_content_file(
 
     if not extracted_text:
         raise HTTPException(status_code=400, detail="파일에서 텍스트를 추출하지 못했습니다")
+    if len(extracted_text) > MAX_EXTRACTED_CHARS:
+        extracted_text = extracted_text[:MAX_EXTRACTED_CHARS]
 
     safe_title = (title or "").strip() or filename
     content_service = ContentService(session)

@@ -88,7 +88,12 @@ class AIService:
             for index, summary in enumerate(prepared_chunk_summaries)
             if summary.strip()
         )
-        prompt = self._create_final_summary_prompt(title, url, combined)
+        prompt = self._create_final_summary_prompt(
+            title=title,
+            url=url,
+            chunk_summaries=combined,
+            chunk_count=len(prepared_chunk_summaries),
+        )
         try:
             response = await self._chat_json(
                 system_message=(
@@ -193,7 +198,23 @@ URL: {url}
 }}
 """
 
-    def _create_final_summary_prompt(self, title: str, url: str, chunk_summaries: str) -> str:
+    def _create_final_summary_prompt(
+        self,
+        title: str,
+        url: str,
+        chunk_summaries: str,
+        chunk_count: int = 1,
+    ) -> str:
+        summary_guide = (
+            "전체 문서 최종 요약 3~4문장"
+            if chunk_count <= 3
+            else "전체 문서 최종 요약 8~12문장 (짧은 단락 2~3개)"
+        )
+        points_guide = (
+            '["가장 중요한 포인트1", "가장 중요한 포인트2", "가장 중요한 포인트3"]'
+            if chunk_count <= 3
+            else '["핵심 포인트1", "핵심 포인트2", "핵심 포인트3", "핵심 포인트4", "핵심 포인트5", "핵심 포인트6"]'
+        )
         return f"""
 아래는 긴 콘텐츠를 chunk 단위로 나눠 요약한 결과입니다.
 
@@ -209,8 +230,8 @@ chunk 요약들:
 - 과도한 일반화 금지, 근거가 없는 해석 금지
 반드시 아래 JSON만 반환하세요.
 {{
-  "summary": "전체 문서 최종 요약 3~4문장",
-  "key_points": ["가장 중요한 포인트1", "가장 중요한 포인트2", "가장 중요한 포인트3"],
+  "summary": "{summary_guide}",
+  "key_points": {points_guide},
   "tags": ["태그1", "태그2", "태그3"],
   "insight": "실무적으로 왜 중요한지 한 줄"
 }}
@@ -328,7 +349,7 @@ chunk 요약들:
 
     def _normalize_summary_payload(self, payload: Dict[str, Any], default_summary: str) -> Dict[str, Any]:
         summary = self._dedupe_sentences(str(payload.get("summary", "")).strip()) or default_summary
-        key_points = self._normalize_list(payload.get("key_points", []), max_items=5)
+        key_points = self._normalize_list(payload.get("key_points", []), max_items=8)
         tags = self._normalize_tags(payload.get("tags", []), max_items=5)
         insight = self._normalize_text(str(payload.get("insight", "")).strip())
         return {

@@ -28,6 +28,14 @@ async function smartFetch<T>(endpoint: string, options: FetchOptions = {}): Prom
 
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem("smartcurator_token");
+        window.localStorage.removeItem("smartcurator_email");
+        window.dispatchEvent(new Event("auth:expired"));
+      }
+      throw new Error("로그인 세션(30분)이 만료되었습니다. 다시 로그인해 주세요.");
+    }
     throw new Error(errorBody.detail ?? "요청에 실패했습니다.");
   }
 

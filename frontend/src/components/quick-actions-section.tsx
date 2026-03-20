@@ -11,8 +11,8 @@ export function QuickActionsSection() {
   return (
     <Section
       id="quick-start"
-      title="바로 테스트 가능한 흐름"
-      description="JWT 토큰을 발급받고, 동일 화면에서 컨텐츠를 큐에 넣어 FastAPI + Celery 파이프라인을 타게 합니다."
+      title="라이브 데모"
+      description="면접 시 바로 시연할 수 있게 로그인과 콘텐츠 등록을 한 화면에서 수행합니다."
     >
       <div className="grid gap-6 lg:grid-cols-2">
         <LoginCard onTokenReady={setToken} />

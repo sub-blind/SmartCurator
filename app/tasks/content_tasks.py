@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 
 from app.core.celery_app import celery_app
 from app.core.database_sync import SessionLocal
@@ -11,6 +12,21 @@ from app.utils.text_chunking import split_into_chunks
 
 
 logger = logging.getLogger(__name__)
+MAX_SUMMARY_CHUNKS = 8
+
+
+def _merge_chunks_for_summary(chunks: list[str], max_chunks: int = MAX_SUMMARY_CHUNKS) -> list[str]:
+    """요약 API 호출 수를 줄이기 위해 과도한 chunk를 묶는다."""
+    if len(chunks) <= max_chunks:
+        return chunks
+
+    group_size = math.ceil(len(chunks) / max_chunks)
+    merged: list[str] = []
+    for start in range(0, len(chunks), group_size):
+        part = "\n\n".join(chunks[start : start + group_size]).strip()
+        if part:
+            merged.append(part)
+    return merged
 
 
 @celery_app.task(bind=True, max_retries=2, default_retry_delay=30)
@@ -92,9 +108,10 @@ def _process_content_sync(content_id: int):
         if content.raw_content:
             logger.info(f"🤖 AI 요약 시작: content_id={content_id}")
             chunks = split_into_chunks(content.raw_content, chunk_size=1100, overlap=180)
+            chunks = _merge_chunks_for_summary(chunks or [content.raw_content])
             chunk_summaries = []
 
-            for chunk in chunks or [content.raw_content]:
+            for chunk in chunks:
                 chunk_res = asyncio.run(
                     ai_service.summarize_chunk(
                         chunk,

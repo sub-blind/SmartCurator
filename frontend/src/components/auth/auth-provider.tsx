@@ -40,6 +40,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleExpired = () => {
+      setToken(null);
+      setUserEmail(null);
+    };
+    window.addEventListener("auth:expired", handleExpired);
+    return () => window.removeEventListener("auth:expired", handleExpired);
+  }, []);
+
   const login = useCallback((newToken: string, email: string) => {
     setToken(newToken);
     setUserEmail(email);
