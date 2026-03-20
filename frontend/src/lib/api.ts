@@ -2,7 +2,7 @@ import type { ChatAnswer, ContentItem, SemanticSearchResponse } from "@/types/co
 
 type FetchOptions = {
   method?: "GET" | "POST" | "PUT" | "DELETE";
-  body?: Record<string, unknown>;
+  body?: Record<string, unknown> | FormData;
   token?: string;
 };
 
@@ -14,10 +14,15 @@ async function smartFetch<T>(endpoint: string, options: FetchOptions = {}): Prom
   const response = await fetch(`${API_BASE}${endpoint}`, {
     method,
     headers: {
-      "Content-Type": "application/json",
+      ...(body instanceof FormData ? {} : { "Content-Type": "application/json" }),
       ...(token ? { Authorization: `Bearer ${token}` } : {})
     },
-    body: body ? JSON.stringify(body) : undefined,
+    body:
+      body instanceof FormData
+        ? body
+        : body
+          ? JSON.stringify(body)
+          : undefined,
     cache: "no-store"
   });
 
@@ -61,6 +66,24 @@ export const api = {
         is_public: params.is_public
       }
     }),
+  uploadContentFile: (params: {
+    file: File;
+    title?: string;
+    is_public: boolean;
+    token: string;
+  }) => {
+    const formData = new FormData();
+    formData.append("file", params.file);
+    if (params.title?.trim()) {
+      formData.append("title", params.title.trim());
+    }
+    formData.append("is_public", String(params.is_public));
+    return smartFetch<ContentItem>("/contents/upload", {
+      method: "POST",
+      token: params.token,
+      body: formData
+    });
+  },
   getMyContents: (token: string) =>
     smartFetch<ContentItem[]>("/contents/my?skip=0&limit=50", {
       method: "GET",

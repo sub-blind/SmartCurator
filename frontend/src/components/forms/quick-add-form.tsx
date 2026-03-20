@@ -29,6 +29,7 @@ export function QuickAddForm({
   onCreated?: () => void;
 }) {
   const [form, setForm] = useState<FormState>(defaultState);
+  const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -45,17 +46,28 @@ export function QuickAddForm({
     setLoading(true);
     setMessage(null);
     try {
-      const payload = {
-        title: form.title,
-        url: form.url || undefined,
-        raw_content: form.content || undefined,
-        content_type: form.type,
-        is_public: form.isPublic,
-        token
-      };
-      await api.quickAddContent(payload);
+      const effectiveTitle = form.title.trim() || file?.name || "제목 없음";
+      if (file) {
+        await api.uploadContentFile({
+          file,
+          title: effectiveTitle,
+          is_public: form.isPublic,
+          token
+        });
+      } else {
+        const payload = {
+          title: effectiveTitle,
+          url: form.url || undefined,
+          raw_content: form.content || undefined,
+          content_type: form.type,
+          is_public: form.isPublic,
+          token
+        };
+        await api.quickAddContent(payload);
+      }
       setMessage("컨텐츠가 백엔드 큐에 등록되었습니다!");
       setForm(defaultState);
+      setFile(null);
       if (onCreated) {
         onCreated();
       }
@@ -78,7 +90,6 @@ export function QuickAddForm({
       <label className="text-xs text-slate-300">
         제목
         <input
-          required
           value={form.title}
           onChange={(e) => handleChange("title", e.target.value)}
           className="mt-1 w-full rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-white focus:border-brand focus:outline-none"
@@ -101,6 +112,18 @@ export function QuickAddForm({
           rows={3}
           className="mt-1 w-full rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-white focus:border-brand focus:outline-none"
         />
+      </label>
+      <label className="text-xs text-slate-300">
+        파일 첨부 (선택: PDF/TXT/MD)
+        <input
+          type="file"
+          accept=".pdf,.txt,.md,text/plain,application/pdf,text/markdown"
+          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          className="mt-1 block w-full text-xs text-slate-200 file:mr-3 file:rounded-lg file:border file:border-white/20 file:bg-slate-800 file:px-3 file:py-1.5 file:text-xs file:text-slate-100 hover:file:border-brand"
+        />
+        <p className="mt-1 text-[11px] text-slate-400">
+          파일을 선택하면 URL/본문 대신 파일 내용으로 등록됩니다.
+        </p>
       </label>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-xs text-slate-300">

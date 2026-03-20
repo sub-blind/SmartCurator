@@ -1,8 +1,10 @@
 import logging
+from io import BytesIO
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
+from pypdf import PdfReader
 from app.core.database import get_db_session
 from app.core.dependencies import get_current_user
 from app.schemas.content import ContentCreate, ContentRead, ContentUpdate
@@ -13,6 +15,7 @@ from app.models.user import User
 
 router = APIRouter(prefix="/contents", tags=["contents"])
 logger = logging.getLogger(__name__)
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
 @router.post("/", response_model=ContentRead)
@@ -36,6 +39,56 @@ async def create_content(
     except Exception as e:
         # 본문 저장은 이미 성공했으므로 API는 정상 응답하고 로그로만 추적한다.
         logger.error("백그라운드 큐 등록 실패: content_id=%s, error=%s", new_content.id, str(e))
+    return new_content
+
+
+@router.post("/upload", response_model=ContentRead)
+async def upload_content_file(
+    file: UploadFile = File(...),
+    title: str | None = Form(None),
+    is_public: bool = Form(False),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """PDF/TXT 파일 업로드 후 텍스트를 추출해 컨텐츠로 저장한다."""
+    filename = file.filename or "uploaded-file"
+    raw_bytes = await file.read()
+    if not raw_bytes:
+        raise HTTPException(status_code=400, detail="비어 있는 파일입니다")
+    if len(raw_bytes) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=400, detail="파일 크기는 10MB 이하여야 합니다")
+
+    lowered = filename.lower()
+    content_type = "pdf" if lowered.endswith(".pdf") else "text"
+    extracted_text = ""
+
+    try:
+        if content_type == "pdf":
+            reader = PdfReader(BytesIO(raw_bytes))
+            extracted_pages = [(page.extract_text() or "").strip() for page in reader.pages]
+            extracted_text = "\n\n".join(part for part in extracted_pages if part)
+        else:
+            extracted_text = raw_bytes.decode("utf-8", errors="ignore").strip()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"파일 처리 실패: {str(e)}")
+
+    if not extracted_text:
+        raise HTTPException(status_code=400, detail="파일에서 텍스트를 추출하지 못했습니다")
+
+    safe_title = (title or "").strip() or filename
+    content_service = ContentService(session)
+    new_content = await content_service.create_content(
+        user_id=current_user.id,
+        title=safe_title,
+        url=None,
+        raw_content=extracted_text,
+        content_type=content_type,
+        is_public=is_public,
+    )
+    try:
+        process_content_task.delay(new_content.id)
+    except Exception as e:
+        logger.error("파일 업로드 후 큐 등록 실패: content_id=%s, error=%s", new_content.id, str(e))
     return new_content
 
 

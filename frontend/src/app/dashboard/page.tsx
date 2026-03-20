@@ -43,6 +43,7 @@ export default function DashboardPage() {
   const [chatLoading, setChatLoading] = useState(false);
   const [chatMessage, setChatMessage] = useState<string | null>(null);
   const [chatAnswer, setChatAnswer] = useState<ChatAnswer | null>(null);
+  const [selectedContent, setSelectedContent] = useState<ContentItem | null>(null);
 
   const loadContents = async () => {
     if (!token) return;
@@ -128,7 +129,7 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <section className="space-y-3 rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-card">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-xl font-semibold text-white">내 콘텐츠</h1>
               <p className="text-xs text-slate-300">
@@ -138,7 +139,7 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => loadContents()}
-              className="rounded-full border border-white/15 px-3 py-1 text-xs text-slate-200 hover:border-brand"
+              className="shrink-0 whitespace-nowrap rounded-full border border-white/15 px-3 py-1 text-xs text-slate-200 hover:border-brand"
             >
               새로고침
             </button>
@@ -158,7 +159,13 @@ export default function DashboardPage() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h2 className="text-sm font-semibold text-white">{item.title}</h2>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedContent(item)}
+                      className="text-left text-sm font-semibold text-white hover:text-blue-200"
+                    >
+                      {item.title}
+                    </button>
                     <div className="mt-1 flex flex-wrap items-center gap-2">
                       <StatusBadge status={item.status} />
                       {item.is_public && (
@@ -185,9 +192,14 @@ export default function DashboardPage() {
                   )}
                 </div>
                 {item.summary && (
-                  <p className="mt-2 line-clamp-3 text-xs text-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedContent(item)}
+                    className="mt-2 block w-full text-left text-xs text-slate-200"
+                  >
                     {truncateText(item.summary, 260)}
-                  </p>
+                    <span className="ml-1 text-[11px] text-blue-300">전체 보기</span>
+                  </button>
                 )}
                 {item.tags && item.tags.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1.5">
@@ -368,6 +380,77 @@ export default function DashboardPage() {
           )}
         </section>
       </div>
+
+      {selectedContent && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center"
+          onClick={() => setSelectedContent(null)}
+        >
+          <div
+            className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/10 bg-slate-950 p-5 shadow-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-white">{selectedContent.title}</h3>
+                <p className="mt-1 text-xs text-slate-400">
+                  생성 {new Date(selectedContent.created_at).toLocaleString()}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedContent(null)}
+                className="rounded-full border border-white/15 px-3 py-1 text-xs text-slate-200 hover:border-brand"
+              >
+                닫기
+              </button>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <StatusBadge status={selectedContent.status} />
+              {selectedContent.is_public && (
+                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] text-slate-100">공개</span>
+              )}
+              <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-200">
+                {selectedContent.content_type}
+              </span>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              <p className="text-xs font-semibold text-slate-300">요약 전체</p>
+              <p className="whitespace-pre-wrap text-sm leading-6 text-slate-100">
+                {selectedContent.summary || "요약이 아직 생성되지 않았습니다."}
+              </p>
+            </div>
+
+            {selectedContent.tags && selectedContent.tags.length > 0 && (
+              <div className="mt-4">
+                <p className="mb-2 text-xs font-semibold text-slate-300">태그</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedContent.tags.map((tag) => (
+                    <span key={tag} className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-200">
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {selectedContent.url && (
+              <a
+                href={selectedContent.url}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-5 inline-block text-xs text-blue-300 underline-offset-2 hover:underline"
+              >
+                원문 보기
+              </a>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
