@@ -1,13 +1,17 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import type { Route } from "next";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAuth } from "@/components/auth/auth-provider";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isReauthMode = searchParams.get("reauth") === "1";
+  const nextPath = searchParams.get("next") || "/dashboard";
   const { token, initialized, login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -15,10 +19,10 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (initialized && token) {
+    if (initialized && token && !isReauthMode) {
       router.replace("/dashboard");
     }
-  }, [initialized, token, router]);
+  }, [initialized, token, router, isReauthMode]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -27,7 +31,7 @@ export default function LoginPage() {
     try {
       const res = await api.login(email, password);
       login(res.access_token, email);
-      router.replace("/dashboard");
+      router.replace(nextPath as Route);
     } catch (err) {
       setError(err instanceof Error ? err.message : "로그인에 실패했습니다.");
     } finally {
@@ -38,9 +42,13 @@ export default function LoginPage() {
   return (
     <div className="mx-auto max-w-md space-y-6 rounded-3xl border border-white/10 bg-slate-900/60 p-8 shadow-card">
       <div className="space-y-2">
-        <h1 className="text-2xl font-semibold text-white">로그인</h1>
+        <h1 className="text-2xl font-semibold text-white">
+          {isReauthMode ? "세션 연장 로그인" : "로그인"}
+        </h1>
         <p className="text-sm text-slate-300">
-          SmartCurator 계정으로 로그인하여 저장한 컨텐츠를 확인하고, 요약/검색/챗봇 기능을 사용해 보세요.
+          {isReauthMode
+            ? "세션 만료 전 연장을 위해 비밀번호를 다시 확인합니다."
+            : "SmartCurator 계정으로 로그인하여 저장한 컨텐츠를 확인하고, 요약/검색/챗봇 기능을 사용해 보세요."}
         </p>
       </div>
       <form onSubmit={handleSubmit} className="space-y-4">
