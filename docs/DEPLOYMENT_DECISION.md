@@ -87,9 +87,11 @@ ALLOWED_ORIGINS=["http://localhost:3000","https://your-app.vercel.app"]
 
 - `https://<터널URL>/health` → 200 확인
 - Vercel 프론트에서 회원가입/로그인
-- 콘텐츠 추가 → Celery 처리 완료 확인
+- 콘텐츠 추가(텍스트/URL/파일 업로드) → Celery 처리 완료 확인
 - 의미론적 검색 테스트
 - AI 어시스트 테스트
+
+PowerShell에서는 `curl`이 `Invoke-WebRequest` 별칭일 수 있으므로, 필요 시 `curl.exe`를 사용합니다.
 
 ## 백엔드 환경 변수
 

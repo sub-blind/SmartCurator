@@ -11,7 +11,7 @@
 ```bash
 docker run -d --name smartcurator-redis -p 6379:6379 redis:latest
 docker run -d --name smartcurator-qdrant -p 6333:6333 qdrant/qdrant:latest
-docker run -d --name smartcurator-postgres -p 5432:5432 -e POSTGRES_PASSWORD=password -e POSTGRES_DB=postgres postgres:15
+docker run -d --name smartcurator-postgres -p 5432:5432 -e POSTGRES_PASSWORD=password -e POSTGRES_DB=smartcurator postgres:15
 ```
 
 이미 있으면:
@@ -25,8 +25,8 @@ docker start smartcurator-redis smartcurator-qdrant smartcurator-postgres
 ```
 ENV=development
 DEBUG=True
-DATABASE_URL=postgresql+psycopg2://postgres:password@localhost:5432/postgres
-ASYNC_DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/postgres
+DATABASE_URL=postgresql+psycopg2://postgres:password@localhost:5432/smartcurator
+ASYNC_DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/smartcurator
 SECRET_KEY=change-this-secret-key-to-random-string
 OPENAI_API_KEY=sk-your-openai-api-key
 OPENAI_MODEL=gpt-3.5-turbo
@@ -71,6 +71,8 @@ curl http://localhost:8000/search/health
 curl http://localhost:8000/chat/health
 ```
 
+PowerShell에서는 `curl` 대신 `curl.exe`를 사용하면 보안 경고 없이 바로 확인할 수 있습니다.
+
 ### 7) 회원가입
 
 ```bash
@@ -93,6 +95,12 @@ curl http://localhost:8000/auth/me -H "Authorization: Bearer TOKEN"
 
 ```bash
 curl -X POST http://localhost:8000/contents/ -H "Authorization: Bearer TOKEN" -H "Content-Type: application/json" -d "{\"title\":\"async DB와 sync DB 분리 이유\",\"raw_content\":\"FastAPI는 비동기로 동작하고 Celery는 동기로 동작합니다. asyncpg 세션을 Celery에서 재사용하면 event loop 충돌이 발생합니다. 따라서 FastAPI용 async 세션과 Celery용 sync 세션을 분리했습니다.\",\"content_type\":\"text\",\"is_public\":false}"
+```
+
+### 10-1) 파일 업로드 추가 (PDF/TXT, TOKEN 교체)
+
+```bash
+curl -X POST http://localhost:8000/contents/upload -H "Authorization: Bearer TOKEN" -F "file=@sample.pdf" -F "title=샘플 PDF" -F "is_public=false"
 ```
 
 ### 11) 콘텐츠 조회 (TOKEN, ID 교체)
@@ -160,7 +168,7 @@ docker run -d --name smartcurator-redis -p 6379:6379 redis:latest
 docker run -d --name smartcurator-qdrant -p 6333:6333 qdrant/qdrant:latest
 
 # PostgreSQL
-docker run -d --name smartcurator-postgres -p 5432:5432 -e POSTGRES_PASSWORD=password -e POSTGRES_DB=postgres postgres:15
+docker run -d --name smartcurator-postgres -p 5432:5432 -e POSTGRES_PASSWORD=password -e POSTGRES_DB=smartcurator postgres:15
 ```
 
 이미 컨테이너가 있으면:
@@ -177,8 +185,8 @@ docker start smartcurator-redis smartcurator-qdrant smartcurator-postgres
 ENV=development
 DEBUG=True
 
-DATABASE_URL=postgresql+psycopg2://postgres:password@localhost:5432/postgres
-ASYNC_DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/postgres
+DATABASE_URL=postgresql+psycopg2://postgres:password@localhost:5432/smartcurator
+ASYNC_DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/smartcurator
 
 SECRET_KEY=change-this-secret-key-to-random-string
 OPENAI_API_KEY=sk-your-openai-api-key

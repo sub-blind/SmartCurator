@@ -6,6 +6,7 @@ AI 기반 개인 지식 큐레이션 프로젝트입니다.
 ## 핵심 기능
 
 - URL 또는 텍스트로 콘텐츠 저장
+- PDF/TXT 파일 업로드로 콘텐츠 저장
 - Celery 비동기 백그라운드 처리
 - 본문 요약 및 태그 자동 생성
 - Qdrant 기반 chunk 단위 벡터 인덱싱
@@ -15,8 +16,8 @@ AI 기반 개인 지식 큐레이션 프로젝트입니다.
 ## 현재 구현 상태
 
 - 인증 흐름: 회원가입, 로그인, 프로필 조회, 로그아웃
-- 대시보드 UI: 콘텐츠 목록(상태 뱃지, 요약, 태그), 새로고침, 삭제, 재처리
-- 빠른 추가: 기사 URL 또는 텍스트 노트 입력
+- 대시보드 UI: 콘텐츠 목록(상태 뱃지, 요약/태그), 새로고침, 삭제, 재처리, 전체 요약 보기
+- 빠른 추가: 기사 URL, 텍스트 노트, PDF/TXT 파일 입력
 - 의미론적 검색: 콘텐츠 단위 그룹핑 + 핵심 snippet 표시
 - AI 어시스트: 답변 텍스트, 근거 chunk, confidence 반환
 - Qdrant 벡터 리인덱스 및 복구 흐름
@@ -48,6 +49,7 @@ POST   /auth/logout
 
 GET    /health
 POST   /contents/
+POST   /contents/upload
 GET    /contents/my
 GET    /contents/{id}
 PUT    /contents/{id}
