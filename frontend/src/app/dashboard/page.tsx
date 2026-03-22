@@ -39,11 +39,38 @@ export default function DashboardPage() {
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchMessage, setSearchMessage] = useState<string | null>(null);
+  const [searchMode, setSearchMode] = useState<"strict" | "balanced" | "broad">("balanced");
   const [question, setQuestion] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [chatMessage, setChatMessage] = useState<string | null>(null);
   const [chatAnswer, setChatAnswer] = useState<ChatAnswer | null>(null);
   const [selectedContent, setSelectedContent] = useState<ContentItem | null>(null);
+  const [expandedSearchResults, setExpandedSearchResults] = useState<Set<number>>(new Set());
+  const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
+
+  const toggleSearchResult = (contentId: number) => {
+    setExpandedSearchResults((prev) => {
+      const next = new Set(prev);
+      if (next.has(contentId)) {
+        next.delete(contentId);
+      } else {
+        next.add(contentId);
+      }
+      return next;
+    });
+  };
+
+  const toggleSource = (sourceKey: string) => {
+    setExpandedSources((prev) => {
+      const next = new Set(prev);
+      if (next.has(sourceKey)) {
+        next.delete(sourceKey);
+      } else {
+        next.add(sourceKey);
+      }
+      return next;
+    });
+  };
 
   const loadContents = async () => {
     if (!token) return;
@@ -70,7 +97,15 @@ export default function DashboardPage() {
     setSearchLoading(true);
     setSearchMessage(null);
     try {
-      const response = await api.semanticSearch(searchQuery.trim(), token);
+      const scoreThresholdByMode: Record<"strict" | "balanced" | "broad", number> = {
+        strict: 0.2,
+        balanced: 0.12,
+        broad: 0.07,
+      };
+      const response = await api.semanticSearchWithOptions(searchQuery.trim(), token, {
+        limit: 6,
+        score_threshold: scoreThresholdByMode[searchMode],
+      });
       setSearchResults(response.results);
       if (response.results.length === 0) {
         setSearchMessage("검색 결과가 없습니다. 더 구체적인 키워드로 다시 검색해보세요.");
@@ -269,6 +304,30 @@ export default function DashboardPage() {
               저장한 콘텐츠를 키워드가 아니라 의미 기준으로 검색합니다. 결과는 짧은 핵심 snippet만 보여줍니다.
             </p>
           </div>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { id: "strict", label: "정확", hint: "잡음 최소" },
+              { id: "balanced", label: "균형", hint: "기본 추천" },
+              { id: "broad", label: "넓게", hint: "결과 많이" },
+            ].map((mode) => {
+              const selected = searchMode === mode.id;
+              return (
+                <button
+                  key={mode.id}
+                  type="button"
+                  onClick={() => setSearchMode(mode.id as "strict" | "balanced" | "broad")}
+                  className={`rounded-full px-3 py-1 text-xs transition ${
+                    selected
+                      ? "border border-blue-400 bg-blue-500/20 text-blue-100"
+                      : "border border-white/15 text-slate-300 hover:border-white/30"
+                  }`}
+                >
+                  {mode.label}
+                  <span className="ml-1 text-[10px] text-slate-400">{mode.hint}</span>
+                </button>
+              );
+            })}
+          </div>
           <div className="flex gap-2">
             <input
               value={searchQuery}
@@ -287,37 +346,50 @@ export default function DashboardPage() {
           </div>
           {searchMessage && <p className="text-xs text-slate-300">{searchMessage}</p>}
           <div className="space-y-3">
-            {searchResults.map((result) => (
-              <article
-                key={result.content_id}
-                className="rounded-2xl border border-white/10 bg-slate-950/60 p-4"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-semibold text-white">{result.title}</h3>
-                  <span className="text-[11px] text-blue-200">
-                    score {result.similarity_score.toFixed(3)}
-                  </span>
-                </div>
-                <p className="mt-2 line-clamp-3 text-xs text-slate-300">
-                  {truncateText(
-                    result.top_snippet || result.summary || "매칭된 snippet이 없습니다.",
-                    180,
-                  )}
-                </p>
-                {result.tags.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {result.tags.map((tag) => (
-                      <span
-                        key={tag}
-                        className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-200"
-                      >
-                        #{tag}
-                      </span>
-                    ))}
+            {searchResults.map((result) => {
+              const text = result.top_snippet || result.summary || "매칭된 snippet이 없습니다.";
+              const expanded = expandedSearchResults.has(result.content_id);
+              const isLong = text.length > 220;
+              return (
+                <article
+                  key={result.content_id}
+                  className="rounded-2xl border border-white/10 bg-slate-950/60 p-4"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-white">{result.title}</h3>
+                    <span className="text-[11px] text-blue-200">
+                      score {result.similarity_score.toFixed(3)}
+                    </span>
                   </div>
-                )}
-              </article>
-            ))}
+                  <div className="mt-2">
+                    <p className="whitespace-pre-wrap text-xs text-slate-300">
+                      {expanded || !isLong ? text : truncateText(text, 220)}
+                    </p>
+                    {isLong && (
+                      <button
+                        type="button"
+                        onClick={() => toggleSearchResult(result.content_id)}
+                        className="mt-1 text-[11px] text-blue-300 hover:underline"
+                      >
+                        {expanded ? "접기" : "더보기"}
+                      </button>
+                    )}
+                  </div>
+                  {result.tags.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {result.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-200"
+                        >
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </article>
+              );
+            })}
           </div>
         </section>
 
@@ -358,22 +430,36 @@ export default function DashboardPage() {
               {chatAnswer.sources.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-xs font-medium text-slate-300">근거 출처</p>
-                  {chatAnswer.sources.map((source, index) => (
-                    <div
-                      key={`${source.content_id}-${source.chunk_index}-${index}`}
-                      className="rounded-xl border border-white/10 bg-slate-900/70 p-3"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs font-medium text-white">{source.title}</p>
-                        <span className="text-[11px] text-slate-400">
-                          chunk {source.chunk_index} · {source.similarity_score.toFixed(3)}
-                        </span>
+                  {chatAnswer.sources.map((source, index) => {
+                    const sourceKey = `${source.content_id}-${source.chunk_index}-${index}`;
+                    const expanded = expandedSources.has(sourceKey);
+                    const isLong = source.snippet.length > 220;
+                    return (
+                      <div
+                        key={sourceKey}
+                        className="rounded-xl border border-white/10 bg-slate-900/70 p-3"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-medium text-white">{source.title}</p>
+                          <span className="text-[11px] text-slate-400">
+                            chunk {source.chunk_index} · {source.similarity_score.toFixed(3)}
+                          </span>
+                        </div>
+                        <p className="mt-1 whitespace-pre-wrap text-xs text-slate-300">
+                          {expanded || !isLong ? source.snippet : truncateText(source.snippet, 220)}
+                        </p>
+                        {isLong && (
+                          <button
+                            type="button"
+                            onClick={() => toggleSource(sourceKey)}
+                            className="mt-1 text-[11px] text-blue-300 hover:underline"
+                          >
+                            {expanded ? "접기" : "더보기"}
+                          </button>
+                        )}
                       </div>
-                      <p className="mt-1 text-xs text-slate-300">
-                        {truncateText(source.snippet, 180)}
-                      </p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

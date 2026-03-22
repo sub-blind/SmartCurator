@@ -115,6 +115,25 @@ export const api = {
         token
       }
     ),
+  semanticSearchWithOptions: (
+    query: string,
+    token: string,
+    options?: { limit?: number; score_threshold?: number },
+  ) => {
+    const limit = options?.limit ?? 6;
+    const scoreThreshold = options?.score_threshold;
+    const thresholdQuery =
+      typeof scoreThreshold === "number"
+        ? `&score_threshold=${encodeURIComponent(scoreThreshold)}`
+        : "";
+    return smartFetch<SemanticSearchResponse>(
+      `/search/semantic?q=${encodeURIComponent(query)}&limit=${limit}${thresholdQuery}`,
+      {
+        method: "GET",
+        token,
+      },
+    );
+  },
   askAssistant: (question: string, token: string) =>
     smartFetch<ChatAnswer>("/chat/ask", {
       method: "POST",

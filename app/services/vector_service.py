@@ -224,8 +224,8 @@ class VectorService:
         query: str,
         user_id: Optional[int] = None,
         limit: int = 6,
-        score_threshold: float = 0.05,
-        min_output_score: float = 0.18,
+        score_threshold: float = 0.12,
+        min_output_score: float = 0.28,
     ) -> List[Dict]:
         """Group chunk-level retrieval results into content-level results."""
         chunk_results = await self.search_similar_chunks(
@@ -269,10 +269,27 @@ class VectorService:
             key=lambda row: (row.get("hybrid_score", row["similarity_score"]), row["similarity_score"]),
             reverse=True,
         )
+        if not results:
+            return []
+
+        top_similarity = results[0]["similarity_score"]
+        top_hybrid = results[0].get("hybrid_score", top_similarity)
+        relative_similarity_floor = max(min_output_score, top_similarity - 0.10)
+        relative_hybrid_floor = max(top_hybrid - 0.12, 0.0)
+
         filtered_results = [
-            row for row in results
-            if row["similarity_score"] >= min_output_score
+            row
+            for row in results
+            if (
+                row["similarity_score"] >= relative_similarity_floor
+                and row.get("hybrid_score", row["similarity_score"]) >= relative_hybrid_floor
+            )
         ]
+
+        # 지나치게 엄격해 0건이 되면 top-1은 보장해 UX를 유지한다.
+        if not filtered_results and results:
+            filtered_results = [results[0]]
+
         return filtered_results[:limit]
 
     async def delete_content_vector(self, content_id: int) -> bool:

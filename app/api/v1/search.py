@@ -11,7 +11,7 @@ router = APIRouter(prefix="/search", tags=["search"])
 async def semantic_search(
     q: str = Query(..., description="검색 쿼리", min_length=2),
     limit: int = Query(10, ge=1, le=50, description="결과 개수"),
-    score_threshold: float = Query(0.05, ge=0.0, le=1.0, description="유사도 임계값"),
+    score_threshold: float = Query(0.12, ge=0.0, le=1.0, description="유사도 임계값"),
     current_user: User = Depends(get_current_user),
 ):
     try:
@@ -35,7 +35,7 @@ async def semantic_search(
 async def public_semantic_search(
     q: str = Query(..., description="검색 쿼리", min_length=2),
     limit: int = Query(10, ge=1, le=50, description="결과 개수"),
-    score_threshold: float = Query(0.05, ge=0.0, le=1.0, description="유사도 임계값"),
+    score_threshold: float = Query(0.12, ge=0.0, le=1.0, description="유사도 임계값"),
 ):
     try:
         results = await vector_service.search_similar_contents(

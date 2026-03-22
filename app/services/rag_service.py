@@ -19,7 +19,7 @@ class RAGService:
         self.rerank_similarity_weight = 0.8
         self.rerank_overlap_weight = 0.2
         self.max_chunks_per_content = 2
-        self.min_visible_source_score = 0.18
+        self.min_visible_source_score = 0.28
 
     def _sanitize_query_for_log(self, text: str) -> str:
         cleaned = (text or "").strip()
@@ -40,8 +40,8 @@ class RAGService:
                 query=question,
                 user_id=user_id,
                 limit=12,
-                score_threshold=0.05,
-                fallback_threshold=0.0,
+                score_threshold=0.12,
+                fallback_threshold=0.05,
             )
             reranked_chunks = self._rerank_chunks(question, retrieved_chunks)[:8]
             visible_chunks = self._filter_visible_chunks(reranked_chunks)
@@ -161,14 +161,24 @@ class RAGService:
             per_content_count[content_id] = used + 1
             diversified.append(item)
 
-        for item in diversified:
-            item.pop("_hybrid_score", None)
         return diversified
 
     def _filter_visible_chunks(self, chunks: List[Dict]) -> List[Dict]:
+        if not chunks:
+            return []
+
+        top_similarity = chunks[0].get("similarity_score", 0.0)
+        top_hybrid = chunks[0].get("_hybrid_score", top_similarity)
+        relative_similarity_floor = max(self.min_visible_source_score, top_similarity - 0.10)
+        relative_hybrid_floor = max(top_hybrid - 0.12, 0.0)
+
         return [
-            chunk for chunk in chunks
-            if chunk.get("similarity_score", 0.0) >= self.min_visible_source_score
+            chunk
+            for chunk in chunks
+            if (
+                chunk.get("similarity_score", 0.0) >= relative_similarity_floor
+                and chunk.get("_hybrid_score", chunk.get("similarity_score", 0.0)) >= relative_hybrid_floor
+            )
         ]
 
     def _build_sources(self, chunks: List[Dict]) -> List[Dict]:
@@ -181,7 +191,7 @@ class RAGService:
                     "content_id": content_id,
                     "title": chunk["title"],
                     "chunk_index": chunk["chunk_index"],
-                    "snippet": chunk["chunk_text"][:220],
+                    "snippet": chunk.get("chunk_text", ""),
                     "similarity_score": round(chunk["similarity_score"], 3),
                 }
 
