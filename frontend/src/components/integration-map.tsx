@@ -14,7 +14,7 @@ export function IntegrationMap() {
           <div key={block.title} className="rounded-2xl border border-white/10 bg-slate-900/40 p-4">
             <div className="flex items-center justify-between gap-4">
               <h3 className="text-lg font-semibold text-white">{block.title}</h3>
-              <span className="text-xs uppercase tracking-[0.2em] text-blue-200">decision</span>
+              <span className="text-xs uppercase tracking-[0.2em] text-blue-200">summary</span>
             </div>
             <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div>

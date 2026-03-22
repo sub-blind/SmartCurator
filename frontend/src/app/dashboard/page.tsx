@@ -140,7 +140,7 @@ export default function DashboardPage() {
         balanced: 0.12,
         broad: 0.07,
       };
-      const response = await api.semanticSearchWithOptions(searchQuery.trim(), token, {
+      const response = await api.semanticSearch(searchQuery.trim(), token, {
         limit: 6,
         score_threshold: scoreThresholdByMode[searchMode],
       });

@@ -127,6 +127,19 @@ curl "http://localhost:8000/contents/my?skip=0&limit=20" -H "Authorization: Bear
 curl "http://localhost:8000/search/semantic?q=RAG&limit=5" -H "Authorization: Bearer TOKEN"
 ```
 
+정확도 모드에 맞춰 임계값을 직접 조정할 수 있습니다:
+
+```bash
+# 정확 (잡음 최소)
+curl "http://localhost:8000/search/semantic?q=RAG&limit=5&score_threshold=0.2" -H "Authorization: Bearer TOKEN"
+
+# 균형 (기본)
+curl "http://localhost:8000/search/semantic?q=RAG&limit=5&score_threshold=0.12" -H "Authorization: Bearer TOKEN"
+
+# 넓게 (결과 확장)
+curl "http://localhost:8000/search/semantic?q=RAG&limit=5&score_threshold=0.07" -H "Authorization: Bearer TOKEN"
+```
+
 ### 15) RAG 질문 (TOKEN 교체)
 
 ```bash

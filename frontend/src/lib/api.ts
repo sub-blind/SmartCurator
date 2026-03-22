@@ -107,15 +107,7 @@ export const api = {
       method: "POST",
       token
     }),
-  semanticSearch: (query: string, token: string) =>
-    smartFetch<SemanticSearchResponse>(
-      `/search/semantic?q=${encodeURIComponent(query)}&limit=6`,
-      {
-        method: "GET",
-        token
-      }
-    ),
-  semanticSearchWithOptions: (
+  semanticSearch: (
     query: string,
     token: string,
     options?: { limit?: number; score_threshold?: number },

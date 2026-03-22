@@ -15,10 +15,10 @@ export const architectureMap = [
   },
   {
     title: "검색 정확도 우선",
-    decision: "Qdrant chunk 검색 + RAG 출처 기반 답변",
-    reason: "요약 텍스트만 쓰는 방식보다 근거 추적성과 답변 신뢰도를 높일 수 있음",
-    tradeoff: "인덱싱/재색인 비용과 데이터 정합성 관리가 필요함",
-    mitigation: "reindex 스크립트와 삭제 동기화 로직으로 운영 복구 경로 제공"
+    decision: "Qdrant chunk 검색 + RAG 출처 기반 답변 + 정확도 모드(정확/균형/넓게)",
+    reason: "의미 검색 결과의 잡음을 줄이고, 질문 의도에 맞는 근거를 우선 노출할 수 있음",
+    tradeoff: "필터를 높이면 일부 경계 사례가 누락될 수 있음",
+    mitigation: "기본 임계치 + 상위 결과 대비 상대 필터 + 검색 모드 전환으로 균형 조정"
   }
 ];
 
@@ -30,13 +30,13 @@ export const buildSteps = [
   },
   {
     title: "설계 포인트",
-    detail: "비동기 요약 파이프라인, 의미론 검색, RAG 기반 Q&A, 재처리/삭제 운영 기능 구현",
-    evidence: "대시보드에서 상태 변화(pending->processing->completed)와 결과를 즉시 확인 가능"
+    detail: "비동기 요약 파이프라인, 의미론 검색 정확도 모드, RAG 기반 Q&A, 재처리/삭제 운영 기능 구현",
+    evidence: "대시보드에서 상태 변화(pending->processing->completed), 검색 모드, 출처 기반 답변을 즉시 확인 가능"
   },
   {
     title: "운영 기준",
-    detail: "세션 만료 안내, 모바일 가독성 개선, 요약 전체보기 등 사용자 경험 중심 운영 기준을 적용",
-    evidence: "배포 환경(CORS/터널) 검증과 상태 기반 처리 흐름으로 운영 가시성 확보"
+    detail: "세션 만료 안내, 모바일 가독성 개선, 검색/출처 더보기(접기), 스니펫 노이즈 제거를 적용",
+    evidence: "배포 환경(CORS/터널) 검증과 상태 기반 처리 흐름 + 검색 결과 가독성 개선으로 운영 가시성 확보"
   },
   {
     title: "확장 계획",
