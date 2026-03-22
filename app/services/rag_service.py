@@ -1,4 +1,5 @@
 import logging
+import re
 from time import perf_counter
 from typing import Dict, List
 
@@ -20,6 +21,13 @@ class RAGService:
         self.rerank_overlap_weight = 0.2
         self.max_chunks_per_content = 2
         self.min_visible_source_score = 0.28
+        self._noise_patterns = [
+            re.compile(r"공유(하기)?", re.IGNORECASE),
+            re.compile(r"페이스북|카카오톡|밴드|트위터", re.IGNORECASE),
+            re.compile(r"URL복사|프린트|글자크기", re.IGNORECASE),
+            re.compile(r"지면\s*아이콘", re.IGNORECASE),
+            re.compile(r"입력\s*\d{4}-\d{2}-\d{2}\s*\d{2}:\d{2}", re.IGNORECASE),
+        ]
 
     def _sanitize_query_for_log(self, text: str) -> str:
         cleaned = (text or "").strip()
@@ -119,9 +127,10 @@ class RAGService:
         current_length = 0
 
         for index, chunk in enumerate(chunks, 1):
+            cleaned_chunk_text = self._clean_chunk_text(chunk.get("chunk_text", ""))
             content_text = (
                 f"\n[출처 {index}] {chunk['title']} (chunk {chunk['chunk_index']})\n"
-                f"내용:\n{chunk['chunk_text']}\n"
+                f"내용:\n{cleaned_chunk_text}\n"
                 f"관련도: {chunk['similarity_score']:.1%}\n---"
             )
 
@@ -132,6 +141,12 @@ class RAGService:
             current_length += len(content_text)
 
         return "\n".join(context_parts)
+
+    def _clean_chunk_text(self, text: str) -> str:
+        cleaned = re.sub(r"\s+", " ", (text or "")).strip()
+        for pattern in self._noise_patterns:
+            cleaned = pattern.sub(" ", cleaned)
+        return re.sub(r"\s{2,}", " ", cleaned).strip()
 
     def _rerank_chunks(self, question: str, chunks: List[Dict]) -> List[Dict]:
         if not chunks:
@@ -191,7 +206,7 @@ class RAGService:
                     "content_id": content_id,
                     "title": chunk["title"],
                     "chunk_index": chunk["chunk_index"],
-                    "snippet": chunk.get("chunk_text", ""),
+                    "snippet": self._clean_chunk_text(chunk.get("chunk_text", "")),
                     "similarity_score": round(chunk["similarity_score"], 3),
                 }
 

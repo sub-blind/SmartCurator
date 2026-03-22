@@ -8,12 +8,50 @@ import { QuickAddForm } from "@/components/forms/quick-add-form";
 import { api } from "@/lib/api";
 import type { ChatAnswer, ContentItem, SearchResultItem } from "@/types/content";
 
+const UI_NOISE_PATTERNS: RegExp[] = [
+  /공유(하기)?/gi,
+  /페이스북|카카오톡|밴드|트위터/gi,
+  /URL복사|프린트|글자크기/gi,
+  /지면\s*아이콘/gi,
+  /입력\s*\d{4}-\d{2}-\d{2}\s*\d{2}:\d{2}/gi,
+];
+
 function truncateText(text: string, maxLength: number) {
   const normalized = (text || "").replace(/\s+/g, " ").trim();
   if (normalized.length <= maxLength) {
     return normalized;
   }
   return `${normalized.slice(0, maxLength).trimEnd()}...`;
+}
+
+function cleanSnippet(text: string) {
+  let cleaned = (text || "").replace(/\s+/g, " ").trim();
+  for (const pattern of UI_NOISE_PATTERNS) {
+    cleaned = cleaned.replace(pattern, " ");
+  }
+  cleaned = cleaned.replace(/\s{2,}/g, " ").trim();
+  return cleaned;
+}
+
+function displayTitle(title: string, contentId: number) {
+  const normalized = (title || "").trim();
+  if (!normalized) return `콘텐츠 #${contentId}`;
+  if (/^뉴스\s*\d+$/i.test(normalized)) return `저장 콘텐츠 #${contentId}`;
+  return normalized;
+}
+
+function getMatchReason(query: string, result: SearchResultItem) {
+  const terms = (query || "")
+    .toLowerCase()
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2);
+  if (terms.length === 0) return "의미 유사도 기반 매칭";
+
+  const haystack = `${result.title} ${result.summary} ${result.top_snippet} ${(result.tags || []).join(" ")}`.toLowerCase();
+  const matched = terms.filter((term) => haystack.includes(term));
+  if (matched.length === 0) return "의미 유사도 기반 매칭";
+  return `매칭 근거: ${matched.slice(0, 3).join(", ")}`;
 }
 
 function StatusBadge({ status }: { status: ContentItem["status"] }) {
@@ -307,8 +345,8 @@ export default function DashboardPage() {
           <div className="flex flex-wrap gap-2">
             {[
               { id: "strict", label: "정확", hint: "잡음 최소" },
-              { id: "balanced", label: "균형", hint: "기본 추천" },
-              { id: "broad", label: "넓게", hint: "결과 많이" },
+              { id: "balanced", label: "균형", hint: "기본" },
+              { id: "broad", label: "넓게", hint: "확장" },
             ].map((mode) => {
               const selected = searchMode === mode.id;
               return (
@@ -316,6 +354,7 @@ export default function DashboardPage() {
                   key={mode.id}
                   type="button"
                   onClick={() => setSearchMode(mode.id as "strict" | "balanced" | "broad")}
+                  title={mode.hint}
                   className={`rounded-full px-3 py-1 text-xs transition ${
                     selected
                       ? "border border-blue-400 bg-blue-500/20 text-blue-100"
@@ -323,7 +362,6 @@ export default function DashboardPage() {
                   }`}
                 >
                   {mode.label}
-                  <span className="ml-1 text-[10px] text-slate-400">{mode.hint}</span>
                 </button>
               );
             })}
@@ -347,7 +385,7 @@ export default function DashboardPage() {
           {searchMessage && <p className="text-xs text-slate-300">{searchMessage}</p>}
           <div className="space-y-3">
             {searchResults.map((result) => {
-              const text = result.top_snippet || result.summary || "매칭된 snippet이 없습니다.";
+              const text = cleanSnippet(result.top_snippet || result.summary || "매칭된 snippet이 없습니다.");
               const expanded = expandedSearchResults.has(result.content_id);
               const isLong = text.length > 220;
               return (
@@ -356,11 +394,12 @@ export default function DashboardPage() {
                   className="rounded-2xl border border-white/10 bg-slate-950/60 p-4"
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-sm font-semibold text-white">{result.title}</h3>
+                    <h3 className="text-sm font-semibold text-white">{displayTitle(result.title, result.content_id)}</h3>
                     <span className="text-[11px] text-blue-200">
                       score {result.similarity_score.toFixed(3)}
                     </span>
                   </div>
+                  <p className="mt-1 text-[11px] text-slate-400">{getMatchReason(searchQuery, result)}</p>
                   <div className="mt-2">
                     <p className="whitespace-pre-wrap text-xs text-slate-300">
                       {expanded || !isLong ? text : truncateText(text, 220)}
@@ -433,20 +472,21 @@ export default function DashboardPage() {
                   {chatAnswer.sources.map((source, index) => {
                     const sourceKey = `${source.content_id}-${source.chunk_index}-${index}`;
                     const expanded = expandedSources.has(sourceKey);
-                    const isLong = source.snippet.length > 220;
+                    const cleanedSnippet = cleanSnippet(source.snippet);
+                    const isLong = cleanedSnippet.length > 220;
                     return (
                       <div
                         key={sourceKey}
                         className="rounded-xl border border-white/10 bg-slate-900/70 p-3"
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-xs font-medium text-white">{source.title}</p>
+                          <p className="text-xs font-medium text-white">{displayTitle(source.title, source.content_id)}</p>
                           <span className="text-[11px] text-slate-400">
                             chunk {source.chunk_index} · {source.similarity_score.toFixed(3)}
                           </span>
                         </div>
                         <p className="mt-1 whitespace-pre-wrap text-xs text-slate-300">
-                          {expanded || !isLong ? source.snippet : truncateText(source.snippet, 220)}
+                          {expanded || !isLong ? cleanedSnippet : truncateText(cleanedSnippet, 220)}
                         </p>
                         {isLong && (
                           <button
