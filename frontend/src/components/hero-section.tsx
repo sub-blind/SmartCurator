@@ -17,7 +17,7 @@ export function HeroSection() {
         {[
           { label: "Core Stack", value: "FastAPI · Celery · Qdrant · Next.js" },
           { label: "User Flow", value: "수집 → 요약 → 의미검색 → AI 질의" },
-          { label: "Deployment", value: "Local API + Tunnel + Vercel" }
+          { label: "Deployment", value: "로컬 API · Cloudflare Tunnel · Vercel" }
         ].map((item) => (
           <div
             key={item.label}

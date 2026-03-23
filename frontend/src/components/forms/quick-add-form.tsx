@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { api } from "@/lib/api";
 import type { ContentType } from "@/types/content";
-import { Pill } from "../ui/pill";
 
 type FormState = {
   title: string;
@@ -65,7 +64,7 @@ export function QuickAddForm({
         };
         await api.quickAddContent(payload);
       }
-      setMessage("컨텐츠가 백엔드 큐에 등록되었습니다!");
+      setMessage("콘텐츠가 백엔드 큐에 등록되었습니다.");
       setForm(defaultState);
       setFile(null);
       if (onCreated) {
@@ -80,12 +79,9 @@ export function QuickAddForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border border-white/10 bg-white/5 p-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-white">컨텐츠 빠르게 추가</p>
-          <p className="text-xs text-slate-400">/contents 엔드포인트 연결</p>
-        </div>
-        <Pill label="Step 2" />
+      <div>
+        <p className="text-sm font-medium text-white">콘텐츠 추가</p>
+        <p className="text-xs text-slate-400">URL, 텍스트, PDF 파일 업로드 지원</p>
       </div>
       <label className="text-xs text-slate-300">
         제목
@@ -145,7 +141,7 @@ export function QuickAddForm({
             onChange={(e) => handleChange("isPublic", e.target.checked)}
             className="h-4 w-4 rounded border-white/20 bg-slate-900/70 accent-blue-500"
           />
-          공개 컨텐츠로 저장
+          공개 콘텐츠로 저장
         </label>
       </div>
       <button
@@ -153,7 +149,7 @@ export function QuickAddForm({
         disabled={loading}
         className="w-full rounded-xl bg-emerald-500/90 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50"
       >
-        {loading ? "등록 중..." : "컨텐츠 큐에 보내기"}
+        {loading ? "등록 중..." : "추가하기"}
       </button>
       {message && <p className="text-xs text-emerald-300">{message}</p>}
     </form>

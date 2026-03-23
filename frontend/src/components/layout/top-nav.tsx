@@ -47,7 +47,7 @@ export function TopNav() {
           SmartCurator
         </Link>
 
-        <nav className="hidden items-center gap-6 text-sm text-slate-300 sm:flex">
+        <nav className="flex items-center gap-3 text-sm text-slate-300 sm:gap-6">
           <Link href="/dashboard" className="transition hover:text-white">
             대시보드
           </Link>

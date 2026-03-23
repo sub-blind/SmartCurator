@@ -48,7 +48,7 @@ export function LoginForm() {
         <p className="text-sm text-slate-300">
           {isReauthMode
             ? "세션 만료 전 연장을 위해 비밀번호를 다시 확인합니다."
-            : "SmartCurator 계정으로 로그인하여 저장한 컨텐츠를 확인하고, 요약/검색/챗봇 기능을 사용해 보세요."}
+            : "SmartCurator 계정으로 로그인하여 저장한 콘텐츠를 확인하고, 요약/검색/챗봇 기능을 사용해 보세요."}
         </p>
       </div>
       <form onSubmit={handleSubmit} className="space-y-4">

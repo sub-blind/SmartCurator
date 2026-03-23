@@ -1,142 +1,146 @@
+﻿import asyncio
+from typing import Dict, Optional
+from urllib.parse import urlparse
+
 import requests
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin, urlparse
-import asyncio
-from typing import Dict, Optional
 
 
 class ScraperService:
-    """웹 페이지 크롤링 서비스
-
-    requests 라이브러리를 기반으로 하며, 비동기 환경에서 작동하도록
-    별도의 스레드에서 동기 HTTP 요청을 실행함.
-    """
+    """URL 본문 스크래핑 서비스."""
 
     def __init__(self):
-        # requests 세션 생성 및 User-Agent 헤더 설정 (차단 방지 목적)
         self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 SmartCurator/1.0'
-        })
-        self.timeout = 10  # 요청 타임아웃 10초 지정
+        self.session.headers.update(
+            {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 SmartCurator/1.0",
+                "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+            }
+        )
+        self.timeout = 12
 
     async def extract_content(self, url: str) -> Dict[str, str]:
-        """
-        주어진 URL에서 웹페이지 내용을 추출하여 반환.
-
-        비동기 함수지만 내부적으로 requests의 동기 get() 함수를 별도 스레드에서 실행.
-
-        Returns:
-            성공 시 dict: title, content, description, url, success=True 포함
-            실패 시 dict: error 메시지, success=False 포함
-        """
+        """URL에서 본문 텍스트를 추출한다. 실패 시 reader fallback을 시도한다."""
         try:
-            # 이벤트 루프에서 별도 스레드로 requests.get 호출
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None,
-                lambda: self.session.get(url, timeout=self.timeout)
-            )
-            response.raise_for_status()
+            primary = await self._extract_via_html(url)
+            if self._is_usable_text(primary.get("content", "")):
+                return primary
 
-            # HTML 파싱
-            soup = BeautifulSoup(response.content, 'html.parser')
-
-            # 제목, 본문, 메타 설명 추출
-            title = self._extract_title(soup, url)
-            content = self._extract_main_content(soup)
-            description = self._extract_description(soup)
+            fallback = await self._extract_via_reader(url)
+            if self._is_usable_text(fallback.get("content", "")):
+                return fallback
 
             return {
-                "title": title,
-                "content": content,
-                "description": description,
-                "url": url,
-                "success": True
+                "error": "URL 본문 추출 실패: 접근 제한 또는 본문이 충분하지 않습니다.",
+                "success": False,
             }
-
+        except requests.HTTPError as e:
+            status_code = e.response.status_code if e.response is not None else None
+            if status_code == 451:
+                return {
+                    "error": (
+                        "해당 언론사/페이지는 정책 또는 지역 제한(451)으로 자동 수집이 차단되었습니다. "
+                        "본문 텍스트 붙여넣기 또는 PDF/TXT 업로드를 이용해주세요."
+                    ),
+                    "success": False,
+                }
+            return {"error": f"HTTP 오류({status_code}): {e}", "success": False}
         except requests.RequestException as e:
-            return {
-                "error": f"네트워크 오류: {str(e)}",
-                "success": False
-            }
+            return {"error": f"네트워크 오류: {e}", "success": False}
         except Exception as e:
-            return {
-                "error": f"크롤링 실패: {str(e)}",
-                "success": False
-            }
+            return {"error": f"스크래핑 실패: {e}", "success": False}
+
+    async def _extract_via_html(self, url: str) -> Dict[str, str]:
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda: self.session.get(url, timeout=self.timeout),
+        )
+        response.raise_for_status()
+
+        soup = BeautifulSoup(response.content, "html.parser")
+        title = self._extract_title(soup, url)
+        content = self._extract_main_content(soup)
+        description = self._extract_description(soup)
+
+        return {
+            "title": title,
+            "content": content,
+            "description": description,
+            "url": url,
+            "success": True,
+        }
+
+    async def _extract_via_reader(self, url: str) -> Dict[str, str]:
+        """동적 페이지/차단 페이지 대비 텍스트 reader 경로 fallback."""
+        reader_url = f"https://r.jina.ai/http://{url.lstrip('/').replace('https://', '').replace('http://', '')}"
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda: self.session.get(reader_url, timeout=self.timeout + 6),
+        )
+        response.raise_for_status()
+
+        raw_text = (response.text or "").strip()
+        cleaned = self._clean_content(raw_text)
+
+        title = self._extract_title_from_text(cleaned) or f"웹페이지 - {urlparse(url).netloc}"
+        return {
+            "title": title,
+            "content": cleaned,
+            "description": None,
+            "url": url,
+            "success": True,
+        }
 
     def _extract_title(self, soup: BeautifulSoup, url: str) -> str:
-        """
-        제목 추출 - 우선순위: og:title > <title> > <h1>
-
-        Args:
-            soup (BeautifulSoup): 파싱된 HTML 객체
-            url (str): 크롤링한 URL (기본 제목 생성용)
-
-        Returns:
-            str: 추출된 제목 또는 기본 제목 문자열
-        """
-        # Open Graph 메타태그 제목
         og_title = soup.find("meta", property="og:title")
         if og_title and og_title.get("content"):
             return og_title["content"].strip()
 
-        # <title> 태그
         title_tag = soup.find("title")
         if title_tag:
             return title_tag.get_text().strip()
 
-        # <h1> 태그
         h1_tag = soup.find("h1")
         if h1_tag:
             return h1_tag.get_text().strip()
 
-        # 기본값: URL 도메인명 포함 문자열
         return f"웹페이지 - {urlparse(url).netloc}"
 
+    def _extract_title_from_text(self, text: str) -> Optional[str]:
+        if not text:
+            return None
+        first_line = text.splitlines()[0].strip()
+        if 3 <= len(first_line) <= 120:
+            return first_line
+        return None
+
     def _extract_main_content(self, soup: BeautifulSoup) -> str:
-        """
-        웹페이지의 주요 본문 텍스트 추출.
-
-        자바스크립트, 스타일, 네비게이션, 푸터 등 불필요한 태그 제거 후,
-        <article>, <main> 태그 우선 추출하고, 특정 클래스명 포함 div로도 시도.
-        최후에 <body> 텍스트 일부 반환.
-
-        Args:
-            soup (BeautifulSoup): 파싱된 HTML 객체
-
-        Returns:
-            str: 추출된 텍스트 본문 (최대 5000자 제한)
-        """
-        # 불필요 태그 제거
         for tag in soup(["script", "style", "nav", "footer", "aside", "form", "noscript"]):
             tag.decompose()
 
-        # <article> 또는 <main> 태그 우선 탐색
         main_content = soup.find("article") or soup.find("main")
         if main_content:
             return self._clean_content(main_content.get_text(separator=" ", strip=True))
 
-        # 특정 클래스명을 포함하는 div 탐색 (content, article, post, main)
         content_divs = soup.find_all(
             "div",
-            class_=lambda x: x and any(
+            class_=lambda x: x
+            and any(
                 keyword in x.lower()
                 for keyword in ["content", "article", "post", "main", "story", "entry", "news"]
-            )
+            ),
         )
         if content_divs:
             joined = " ".join(div.get_text(separator=" ", strip=True) for div in content_divs)
             return self._clean_content(joined)
 
-        # 긴 <p> 텍스트를 우선 합성
         paragraphs = [p.get_text(separator=" ", strip=True) for p in soup.find_all("p")]
         paragraphs = [p for p in paragraphs if len(p) > 40]
         if paragraphs:
             return self._clean_content(" ".join(paragraphs))
 
-        # <body> 텍스트 반환 (최대 5000자)
         body = soup.find("body")
         if body:
             return self._clean_content(body.get_text(separator=" ", strip=True))
@@ -144,31 +148,38 @@ class ScraperService:
         return "내용을 추출할 수 없습니다."
 
     def _extract_description(self, soup: BeautifulSoup) -> Optional[str]:
-        """
-        메타 설명(description) 태그 추출.
-
-        Args:
-            soup (BeautifulSoup): 파싱된 HTML 객체
-
-        Returns:
-            Optional[str]: 메타 설명 내용 또는 None
-        """
-        meta_desc = (
-            soup.find("meta", attrs={"name": "description"}) or
-            soup.find("meta", property="og:description")
+        meta_desc = soup.find("meta", attrs={"name": "description"}) or soup.find(
+            "meta", property="og:description"
         )
-
         if meta_desc and meta_desc.get("content"):
             return meta_desc["content"].strip()
-
         return None
 
+    def _is_usable_text(self, text: str) -> bool:
+        normalized = " ".join((text or "").split()).strip().lower()
+        if not normalized:
+            return False
+        if "내용을 추출할 수 없습니다" in normalized:
+            return False
+        if len(normalized) < 120:
+            return False
+        return True
+
     def _clean_content(self, text: str) -> str:
-        """광고성/중복 공백을 줄이고 본문 길이를 제한한다."""
         if not text:
             return "내용을 추출할 수 없습니다."
-        text = " ".join(text.split())
-        noisy_keywords = ["쿠키", "광고", "구독", "로그인", "회원가입", "저작권", "무단 전재"]
+
+        normalized = " ".join(text.split())
+        noisy_keywords = [
+            "쿠키",
+            "광고",
+            "구독",
+            "로그인",
+            "회원가입",
+            "프린트",
+            "URL복사",
+        ]
         for keyword in noisy_keywords:
-            text = text.replace(keyword, "")
-        return text[:8000].strip() or "내용을 추출할 수 없습니다."
+            normalized = normalized.replace(keyword, "")
+
+        return normalized[:12000].strip() or "내용을 추출할 수 없습니다."

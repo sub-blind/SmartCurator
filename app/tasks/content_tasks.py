@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import logging
 import math
 
@@ -13,6 +13,12 @@ from app.utils.text_chunking import split_into_chunks
 
 logger = logging.getLogger(__name__)
 MAX_SUMMARY_CHUNKS = 8
+MIN_SCRAPED_CONTENT_CHARS = 120
+SCRAPE_FAILURE_MARKERS = (
+    "내용을 추출할 수 없습니다",
+    "unable to extract content",
+    "content could not be extracted",
+)
 
 
 def _merge_chunks_for_summary(chunks: list[str], max_chunks: int = MAX_SUMMARY_CHUNKS) -> list[str]:
@@ -29,84 +35,99 @@ def _merge_chunks_for_summary(chunks: list[str], max_chunks: int = MAX_SUMMARY_C
     return merged
 
 
+def _is_valid_scraped_content(text: str) -> bool:
+    """크롤링 결과가 실제 본문으로 볼 수 있는지 최소 검증."""
+    normalized = " ".join((text or "").split()).strip()
+    if not normalized:
+        return False
+    lowered = normalized.lower()
+    if any(marker in lowered for marker in SCRAPE_FAILURE_MARKERS):
+        return False
+    if len(normalized) < MIN_SCRAPED_CONTENT_CHARS:
+        return False
+    return True
+
+
 @celery_app.task(bind=True, max_retries=2, default_retry_delay=30)
 def process_content_task(self, content_id: int):
-    """컨텐츠 처리 태스크 (동기 + 별도 DB 세션 사용)"""
+    """콘텐츠 처리 태스크."""
     try:
-        logger.info(f"🚀 Celery 태스크 시작: content_id={content_id}")
-        
+        logger.info("🚀 Celery 태스크 시작: content_id=%s", content_id)
+
         result = _process_content_sync(content_id)
-        
-        logger.info(f"✅ Celery 태스크 완료: content_id={content_id}")
+
+        logger.info("✅ Celery 태스크 완료: content_id=%s", content_id)
         return result
-        
+
     except Exception as exc:
-        logger.error(f"❌ 태스크 실패: content_id={content_id}, error={exc}")
-        
+        logger.error("❌ 태스크 실패: content_id=%s, error=%s", content_id, exc)
+
         if self.request.retries < self.max_retries:
             countdown = self.default_retry_delay * (2 ** self.request.retries)
-            logger.info(f"🔄 재시도: content_id={content_id}, retry={self.request.retries+1}")
+            logger.info("🔁 재시도: content_id=%s, retry=%s", content_id, self.request.retries + 1)
             raise self.retry(exc=exc, countdown=countdown)
-        else:
-            logger.error(f"💀 재시도 포기: content_id={content_id}")
-            # 실패 상태 저장
+
+        logger.error("🛑 최대 재시도 초과: content_id=%s", content_id)
+        try:
+            session = SessionLocal()
+            content = session.get(Content, content_id)
+            if content:
+                content.status = "failed"
+                session.commit()
+        except Exception as e:  # pragma: no cover
+            logger.warning("실패 상태 업데이트 실패: %s", e)
+        finally:
             try:
-                session = SessionLocal()
-                content = session.get(Content, content_id)
-                if content:
-                    content.status = "failed"
-                    session.commit()
-            except Exception as e:
-                logger.warning(f"실패 상태 업데이트 실패: {e}")
-            finally:
-                try:
-                    session.close()
-                except Exception:
-                    pass
-            raise
+                session.close()
+            except Exception:
+                pass
+        raise
 
 
 def _process_content_sync(content_id: int):
-    """
-    Celery 워커에서 실행되는 동기 처리 파이프라인.
-    - 동기 DB 세션(SessionLocal) 사용
-    - 크롤링/AI 요약/벡터 저장은 async 함수이므로 asyncio.run 으로 감쌈
-    """
+    """Celery 워커에서 실행되는 동기 처리 파이프라인."""
     session = SessionLocal()
     scraper = ScraperService()
     ai_service = AIService()
 
     try:
-        logger.info(f"🔄 컨텐츠 처리 시작: content_id={content_id}")
+        logger.info("🔄 콘텐츠 처리 시작: content_id=%s", content_id)
 
         content = session.get(Content, content_id)
         if not content:
-            logger.error(f"컨텐츠를 찾을 수 없음: content_id={content_id}")
+            logger.error("콘텐츠를 찾을 수 없음: content_id=%s", content_id)
             return {"content_id": content_id, "status": "not_found"}
 
-        # 상태: processing
         content.status = "processing"
         session.commit()
 
-        # 1) URL 크롤링
+        # 1) URL 스크래핑
         if content.content_type == "url" and content.url:
-            logger.info(f"🌐 크롤링 시작: {content.url}")
+            logger.info("🕷️ 크롤링 시작: %s", content.url)
             scraped = asyncio.run(scraper.extract_content(content.url))
             if scraped.get("success"):
-                content.raw_content = scraped.get("content")
+                scraped_content = (scraped.get("content") or "").strip()
+                if not _is_valid_scraped_content(scraped_content):
+                    error_msg = "URL 본문 추출 실패: 접근 제한 또는 본문이 충분하지 않습니다."
+                    logger.error("❌ 크롤링 실패: %s", error_msg)
+                    content.status = "failed"
+                    session.commit()
+                    return {"content_id": content_id, "status": "failed", "error": error_msg}
+
+                content.raw_content = scraped_content
                 if not content.title or content.title == "웹페이지":
                     content.title = scraped.get("title", content.title)
-                logger.info(f"✅ 크롤링 완료: {len(content.raw_content or '')} chars")
+                logger.info("✅ 크롤링 완료: %s chars", len(content.raw_content or ""))
             else:
-                error_msg = scraped.get("error", "크롤링 실패")
-                logger.error(f"❌ 크롤링 실패: {error_msg}")
+                error_msg = scraped.get("error", "스크래핑 실패")
+                logger.error("❌ 크롤링 실패: %s", error_msg)
                 content.status = "failed"
                 session.commit()
                 return {"content_id": content_id, "status": "failed", "error": error_msg}
 
-        # 2) AI 요약 (chunk 기반 2단계)
+        # 2) AI 요약
         if content.raw_content:
-            logger.info(f"🤖 AI 요약 시작: content_id={content_id}")
+            logger.info("🤖 AI 요약 시작: content_id=%s", content_id)
             chunks = split_into_chunks(content.raw_content, chunk_size=1100, overlap=180)
             chunks = _merge_chunks_for_summary(chunks or [content.raw_content])
             chunk_summaries = []
@@ -121,7 +142,7 @@ def _process_content_sync(content_id: int):
                 )
                 if not chunk_res.get("success"):
                     error_msg = chunk_res.get("error", "chunk 요약 실패")
-                    logger.error(f"❌ chunk 요약 실패: {error_msg}")
+                    logger.error("❌ chunk 요약 실패: %s", error_msg)
                     content.status = "failed"
                     session.commit()
                     return {"content_id": content_id, "status": "failed", "error": error_msg}
@@ -143,26 +164,28 @@ def _process_content_sync(content_id: int):
                         chunk_summaries=chunk_summaries,
                     )
                 )
+
             if ai_res.get("success"):
                 content.summary = ai_res.get("summary")
                 content.tags = ai_res.get("tags", [])
                 content.status = "completed"
                 logger.info(
-                    f"✅ AI 요약 완료: {len(content.summary or '')} chars,"
-                    f" {len(content.tags or [])} tags"
+                    "✅ AI 요약 완료: %s chars, %s tags",
+                    len(content.summary or ""),
+                    len(content.tags or []),
                 )
             else:
                 error_msg = ai_res.get("error", "AI 요약 실패")
-                logger.error(f"❌ AI 요약 실패: {error_msg}")
+                logger.error("❌ AI 요약 실패: %s", error_msg)
                 content.status = "failed"
                 session.commit()
                 return {"content_id": content_id, "status": "failed", "error": error_msg}
 
         session.commit()
 
-        # 3) 벡터 저장 (요약이 성공한 경우)
+        # 3) 벡터 저장
         if content.status == "completed" and content.summary:
-            logger.info(f"🔢 벡터 저장 시작: content_id={content_id}")
+            logger.info("🧠 벡터 저장 시작: content_id=%s", content_id)
             asyncio.run(
                 vector_service.store_content_chunks(
                     content_id=content.id,
@@ -184,7 +207,7 @@ def _process_content_sync(content_id: int):
         }
 
     except Exception as e:
-        logger.error(f"❌ 처리 실패: content_id={content_id}, error={e}", exc_info=True)
+        logger.error("❌ 처리 실패: content_id=%s, error=%s", content_id, e, exc_info=True)
         try:
             content = session.get(Content, content_id)
             if content:
@@ -199,9 +222,10 @@ def _process_content_sync(content_id: int):
 
 @celery_app.task
 def health_check():
-    """헬스체크"""
+    """헬스체크."""
     import datetime
+
     return {
-        "status": "healthy", 
-        "timestamp": datetime.datetime.now().isoformat()
+        "status": "healthy",
+        "timestamp": datetime.datetime.now().isoformat(),
     }
