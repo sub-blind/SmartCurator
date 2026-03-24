@@ -6,26 +6,31 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
+import { api } from "@/lib/api";
 
 type AuthContextValue = {
   token: string | null;
+  refreshToken: string | null;
   userEmail: string | null;
   initialized: boolean;
   tokenExpiresAt: number | null;
   secondsUntilExpiry: number | null;
   isExpiringSoon: boolean;
-  login: (token: string, email: string) => void;
+  login: (token: string, email: string, refreshToken?: string | null) => void;
   logout: () => void;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const TOKEN_KEY = "smartcurator_token";
+const REFRESH_TOKEN_KEY = "smartcurator_refresh_token";
 const EMAIL_KEY = "smartcurator_email";
 const EXPIRY_WARNING_SECONDS = 5 * 60;
+const AUTO_REFRESH_THRESHOLD_SECONDS = 2 * 60;
 
 function decodeJwtExp(token: string): number | null {
   try {
@@ -42,16 +47,20 @@ function decodeJwtExp(token: string): number | null {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
+  const [refreshToken, setRefreshToken] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
   const [nowSeconds, setNowSeconds] = useState<number>(() => Math.floor(Date.now() / 1000));
+  const refreshInFlightRef = useRef(false);
 
   useEffect(() => {
     try {
       if (typeof window === "undefined") return;
       const storedToken = window.localStorage.getItem(TOKEN_KEY);
+      const storedRefreshToken = window.localStorage.getItem(REFRESH_TOKEN_KEY);
       const storedEmail = window.localStorage.getItem(EMAIL_KEY);
       if (storedToken) setToken(storedToken);
+      if (storedRefreshToken) setRefreshToken(storedRefreshToken);
       if (storedEmail) setUserEmail(storedEmail);
     } finally {
       setInitialized(true);
@@ -69,29 +78,73 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (typeof window === "undefined") return;
     const handleExpired = () => {
       setToken(null);
+      setRefreshToken(null);
       setUserEmail(null);
     };
     window.addEventListener("auth:expired", handleExpired);
     return () => window.removeEventListener("auth:expired", handleExpired);
   }, []);
 
-  const login = useCallback((newToken: string, email: string) => {
+  const login = useCallback((newToken: string, email: string, newRefreshToken?: string | null) => {
     setToken(newToken);
+    if (typeof newRefreshToken === "string") {
+      setRefreshToken(newRefreshToken);
+    }
     setUserEmail(email);
     if (typeof window !== "undefined") {
       window.localStorage.setItem(TOKEN_KEY, newToken);
+      if (typeof newRefreshToken === "string") {
+        window.localStorage.setItem(REFRESH_TOKEN_KEY, newRefreshToken);
+      }
       window.localStorage.setItem(EMAIL_KEY, email);
     }
   }, []);
 
   const logout = useCallback(() => {
     setToken(null);
+    setRefreshToken(null);
     setUserEmail(null);
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(TOKEN_KEY);
+      window.localStorage.removeItem(REFRESH_TOKEN_KEY);
       window.localStorage.removeItem(EMAIL_KEY);
     }
   }, []);
+
+  const performRefresh = useCallback(async () => {
+    if (!refreshToken || refreshInFlightRef.current) return;
+    refreshInFlightRef.current = true;
+    try {
+      const res = await api.refresh(refreshToken);
+      setToken(res.access_token);
+      setRefreshToken(res.refresh_token);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(TOKEN_KEY, res.access_token);
+        window.localStorage.setItem(REFRESH_TOKEN_KEY, res.refresh_token);
+      }
+    } catch {
+      logout();
+    } finally {
+      refreshInFlightRef.current = false;
+    }
+  }, [refreshToken, logout]);
+
+  useEffect(() => {
+    if (!initialized) return;
+    if (!token && refreshToken) {
+      void performRefresh();
+    }
+  }, [initialized, token, refreshToken, performRefresh]);
+
+  useEffect(() => {
+    if (!initialized || !token || !refreshToken) return;
+    const exp = decodeJwtExp(token);
+    if (!exp) return;
+    const secondsLeft = exp - nowSeconds;
+    if (secondsLeft > 0 && secondsLeft <= AUTO_REFRESH_THRESHOLD_SECONDS) {
+      void performRefresh();
+    }
+  }, [initialized, token, refreshToken, nowSeconds, performRefresh]);
 
   const value = useMemo(() => {
     const tokenExpiresAt = token ? decodeJwtExp(token) : null;
@@ -103,6 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return {
       token,
+      refreshToken,
       userEmail,
       initialized,
       tokenExpiresAt,
@@ -111,7 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       logout,
     };
-  }, [token, userEmail, initialized, login, logout, nowSeconds]);
+  }, [token, refreshToken, userEmail, initialized, login, logout, nowSeconds]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

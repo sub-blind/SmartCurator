@@ -30,7 +30,7 @@ export function LoginForm() {
     setError(null);
     try {
       const res = await api.login(email, password);
-      login(res.access_token, email);
+      login(res.access_token, email, res.refresh_token);
       if (!isReauthMode && nextPath === "/dashboard") {
         router.replace("/dashboard?onboard=1");
       } else {

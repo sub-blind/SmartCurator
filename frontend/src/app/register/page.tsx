@@ -22,7 +22,7 @@ export default function RegisterPage() {
     try {
       await api.register({ email, password, full_name: fullName || undefined });
       const res = await api.login(email, password);
-      login(res.access_token, email);
+      login(res.access_token, email, res.refresh_token);
       router.replace("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "회원가입에 실패했습니다.");

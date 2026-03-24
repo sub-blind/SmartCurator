@@ -4,8 +4,9 @@ from sqlalchemy.future import select
 
 from app.core.database import get_db_session
 from app.core.dependencies import get_current_user
+from app.core.security import decode_refresh_token
 from app.models.user import User
-from app.schemas.auth import UserLogin, TokenResponse
+from app.schemas.auth import RefreshTokenRequest, UserLogin, TokenResponse
 from app.schemas.user import UserCreate, UserRead, UserUpdate
 from app.services.auth_service import AuthService
 
@@ -43,8 +44,32 @@ async def login(
     if not authenticated:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-    access_token = auth_service.create_token_for_user(authenticated)
-    return {"access_token": access_token, "token_type": "bearer"}
+    access_token, refresh_token = auth_service.create_tokens_for_user(authenticated)
+    return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh_token(
+    request: RefreshTokenRequest,
+    session: AsyncSession = Depends(get_db_session),
+):
+    """리프레시 토큰으로 액세스/리프레시 토큰 재발급"""
+    payload = decode_refresh_token(request.refresh_token)
+    if payload is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+
+    user_id = payload.get("sub")
+    if user_id is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+
+    result = await session.execute(select(User).where(User.id == int(user_id)))
+    user = result.scalars().first()
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not available")
+
+    auth_service = AuthService(session)
+    access_token, refresh_token = auth_service.create_tokens_for_user(user)
+    return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
 
 
 @router.get("/me", response_model=UserRead)

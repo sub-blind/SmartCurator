@@ -1,4 +1,4 @@
-from app.core.security import get_password_hash, verify_password, create_access_token
+from app.core.security import get_password_hash, verify_password, create_access_token, create_refresh_token
 from app.models.user import User
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -42,7 +42,9 @@ class AuthService:
             return None
         return user
 
-    def create_token_for_user(self, user: User) -> str:
-        """JWT 액세스 토큰 생성"""
+    def create_tokens_for_user(self, user: User) -> tuple[str, str]:
+        """JWT 액세스/리프레시 토큰 생성"""
         token_data = {"sub": str(user.id), "email": user.email}
-        return create_access_token(token_data)
+        access_token = create_access_token(token_data)
+        refresh_token = create_refresh_token(token_data)
+        return access_token, refresh_token

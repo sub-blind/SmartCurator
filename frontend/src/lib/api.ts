@@ -7,6 +7,9 @@ type FetchOptions = {
 };
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/+$/, "");
+const TOKEN_KEY = "smartcurator_token";
+const EMAIL_KEY = "smartcurator_email";
+const REFRESH_TOKEN_KEY = "smartcurator_refresh_token";
 
 async function smartFetch<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
   const { method = "GET", body, token } = options;
@@ -35,8 +38,9 @@ async function smartFetch<T>(endpoint: string, options: FetchOptions = {}): Prom
     const errorBody = await response.json().catch(() => ({}));
     if (response.status === 401) {
       if (typeof window !== "undefined") {
-        window.localStorage.removeItem("smartcurator_token");
-        window.localStorage.removeItem("smartcurator_email");
+        window.localStorage.removeItem(TOKEN_KEY);
+        window.localStorage.removeItem(EMAIL_KEY);
+        window.localStorage.removeItem(REFRESH_TOKEN_KEY);
         window.dispatchEvent(new Event("auth:expired"));
       }
       throw new Error("로그인 세션(30분)이 만료되었습니다. 다시 로그인해 주세요.");
@@ -52,9 +56,14 @@ async function smartFetch<T>(endpoint: string, options: FetchOptions = {}): Prom
 
 export const api = {
   login: (email: string, password: string) =>
-    smartFetch<{ access_token: string; token_type: string }>("/auth/login", {
+    smartFetch<{ access_token: string; refresh_token: string; token_type: string }>("/auth/login", {
       method: "POST",
       body: { email, password }
+    }),
+  refresh: (refreshToken: string) =>
+    smartFetch<{ access_token: string; refresh_token: string; token_type: string }>("/auth/refresh", {
+      method: "POST",
+      body: { refresh_token: refreshToken }
     }),
   register: (params: { email: string; password: string; full_name?: string }) =>
     smartFetch("/auth/register", { method: "POST", body: params }),

@@ -98,12 +98,6 @@ export function HomeExperienceSection() {
           >
             대시보드로 이동
           </Link>
-          <Link
-            href="/project-notes"
-            className="rounded-full border border-white/20 px-4 py-2 text-sm text-slate-200 hover:border-white/40"
-          >
-            구현 기록 보기
-          </Link>
         </div>
       </Section>
     );

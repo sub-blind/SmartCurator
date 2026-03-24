@@ -10,6 +10,7 @@ from app.core.config import settings
 SECRET_KEY = settings.SECRET_KEY
 ALGORITHM = settings.ALGORITHM
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+REFRESH_TOKEN_EXPIRE_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -33,12 +34,25 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     else:
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     
-    to_encode.update({"exp": expire})
+    to_encode.update({"exp": expire, "token_type": "access"})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
 
-def decode_access_token(token: str) -> Optional[dict]:
+def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    """JWT 리프레시 토큰 생성"""
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+
+    to_encode.update({"exp": expire, "token_type": "refresh"})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+
+def decode_token(token: str) -> Optional[dict]:
     """JWT 토큰 디코딩 및 검증, 실패 시 None 반환"""
     try:
         payload = jwt.decode(
@@ -49,3 +63,22 @@ def decode_access_token(token: str) -> Optional[dict]:
         return payload
     except JWTError:
         return None
+
+
+def decode_access_token(token: str) -> Optional[dict]:
+    payload = decode_token(token)
+    if payload is None:
+        return None
+    token_type = payload.get("token_type")
+    if token_type == "refresh":
+        return None
+    return payload
+
+
+def decode_refresh_token(token: str) -> Optional[dict]:
+    payload = decode_token(token)
+    if payload is None:
+        return None
+    if payload.get("token_type") != "refresh":
+        return None
+    return payload

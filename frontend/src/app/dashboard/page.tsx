@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -17,6 +17,13 @@ const UI_NOISE_PATTERNS: RegExp[] = [
   /입력\s*\d{4}-\d{2}-\d{2}\s*\d{2}:\d{2}/gi,
 ];
 const CONTENTS_PAGE_SIZE = 4;
+const TOAST_TTL_MS = 3500;
+
+type DashboardToast = {
+  id: number;
+  kind: "success" | "error";
+  text: string;
+};
 
 function truncateText(text: string, maxLength: number) {
   const normalized = (text || "").replace(/\s+/g, " ").trim();
@@ -105,8 +112,12 @@ function DashboardPageContent() {
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
   const [showQuickGuide, setShowQuickGuide] = useState(false);
   const [currentContentsPage, setCurrentContentsPage] = useState(1);
+  const [toasts, setToasts] = useState<DashboardToast[]>([]);
 
   const ONBOARDING_DISMISS_KEY = "smartcurator_dashboard_quick_guide_dismissed_v1";
+  const hasLoadedOnceRef = useRef(false);
+  const prevStatusByIdRef = useRef<Map<number, ContentItem["status"]>>(new Map());
+  const requestInFlightRef = useRef(false);
 
   const sortedContents = useMemo(() => {
     return [...contents].sort((a, b) => {
@@ -147,25 +158,72 @@ function DashboardPageContent() {
     });
   };
 
-  const loadContents = useCallback(async () => {
+  const pushToast = useCallback((kind: DashboardToast["kind"], text: string) => {
+    const id = Date.now() + Math.floor(Math.random() * 10000);
+    setToasts((prev) => [...prev, { id, kind, text }].slice(-4));
+    window.setTimeout(() => {
+      setToasts((prev) => prev.filter((toast) => toast.id !== id));
+    }, TOAST_TTL_MS);
+  }, []);
+
+  const loadContents = useCallback(async (options?: { silent?: boolean; resetPage?: boolean }) => {
     if (!token) return;
-    setLoading(true);
-    setMessage(null);
+    if (requestInFlightRef.current) return;
+    requestInFlightRef.current = true;
+    const silent = options?.silent ?? false;
+    if (!silent) {
+      setLoading(true);
+      setMessage(null);
+    }
     try {
       const data = await api.getMyContents(token);
+      const nextStatusMap = new Map<number, ContentItem["status"]>();
+      for (const item of data) {
+        nextStatusMap.set(item.id, item.status);
+      }
+
+      if (hasLoadedOnceRef.current) {
+        for (const item of data) {
+          const prevStatus = prevStatusByIdRef.current.get(item.id);
+          const becameCompleted = (prevStatus === "pending" || prevStatus === "processing") && item.status === "completed";
+          const becameFailed = (prevStatus === "pending" || prevStatus === "processing") && item.status === "failed";
+          if (becameCompleted) {
+            pushToast("success", `${displayTitle(item.title, item.id)} 처리가 완료되었습니다.`);
+          }
+          if (becameFailed) {
+            pushToast("error", `${displayTitle(item.title, item.id)} 처리에 실패했습니다.`);
+          }
+        }
+      }
+
+      prevStatusByIdRef.current = nextStatusMap;
+      hasLoadedOnceRef.current = true;
       setContents(data);
-      setCurrentContentsPage(1);
+      if (options?.resetPage) {
+        setCurrentContentsPage(1);
+      }
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "콘텐츠를 불러오지 못했습니다.");
     } finally {
-      setLoading(false);
+      requestInFlightRef.current = false;
+      if (!silent) {
+        setLoading(false);
+      }
     }
-  }, [token]);
+  }, [token, pushToast]);
 
   useEffect(() => {
     if (initialized && token) {
-      void loadContents();
+      void loadContents({ resetPage: true });
     }
+  }, [initialized, token, loadContents]);
+
+  useEffect(() => {
+    if (!initialized || !token) return;
+    const timer = window.setInterval(() => {
+      void loadContents({ silent: true });
+    }, 12000);
+    return () => window.clearInterval(timer);
   }, [initialized, token, loadContents]);
 
   useEffect(() => {
@@ -259,7 +317,7 @@ function DashboardPageContent() {
         <section className="rounded-3xl border border-blue-400/30 bg-blue-500/10 p-5 shadow-card">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-blue-200">Quick Guide</p>
+              <p className="text-xs uppercase tracking-[0.2em] text-blue-200">빠른 가이드</p>
               <h2 className="mt-1 text-lg font-semibold text-white">지금 바로 쓰는 3단계</h2>
               <p className="mt-1 text-sm text-slate-200">
                 1) 콘텐츠 추가 2) 의미 검색 3) AI 질의 순서로 시작하면 가장 빨리 결과를 볼 수 있어요.
@@ -291,7 +349,7 @@ function DashboardPageContent() {
             </div>
             <button
               type="button"
-              onClick={() => loadContents()}
+              onClick={() => loadContents({ resetPage: true })}
               className="shrink-0 whitespace-nowrap rounded-full border border-white/15 px-3 py-1 text-xs text-slate-200 hover:border-brand"
             >
               새로고침
@@ -443,7 +501,7 @@ function DashboardPageContent() {
               기사 URL이나 텍스트를 넣으면 백엔드가 요약, 태그, 벡터를 생성합니다.
             </p>
           </div>
-          <QuickAddForm token={token} onCreated={loadContents} />
+          <QuickAddForm token={token} onCreated={() => void loadContents({ resetPage: true })} />
         </section>
       </div>
 
@@ -498,7 +556,7 @@ function DashboardPageContent() {
           {searchMessage && <p className="text-xs text-slate-300">{searchMessage}</p>}
           <div className="space-y-3">
             {searchResults.map((result) => {
-              const text = cleanSnippet(result.top_snippet || result.summary || "매칭된 snippet이 없습니다.");
+              const text = cleanSnippet(result.top_snippet || result.summary || "매칭된 발췌문이 없습니다.");
               const expanded = expandedSearchResults.has(result.content_id);
               const isLong = text.length > 220;
               return (
@@ -509,7 +567,7 @@ function DashboardPageContent() {
                   <div className="flex items-center justify-between gap-3">
                     <h3 className="text-sm font-semibold text-white">{displayTitle(result.title, result.content_id)}</h3>
                     <span className="text-[11px] text-blue-200">
-                      score {result.similarity_score.toFixed(3)}
+                      유사도 {result.similarity_score.toFixed(3)}
                     </span>
                   </div>
                   <p className="mt-1 text-[11px] text-slate-400">{getMatchReason(searchQuery, result)}</p>
@@ -549,7 +607,7 @@ function DashboardPageContent() {
           <div>
             <h2 className="text-lg font-semibold text-white">AI 어시스턴트</h2>
             <p className="text-xs text-slate-300">
-              저장한 기사와 노트의 근거 chunk를 바탕으로 질문에 답변합니다.
+              저장한 기사와 노트의 근거 문단을 바탕으로 질문에 답변합니다.
             </p>
           </div>
           <div className="space-y-3">
@@ -575,7 +633,7 @@ function DashboardPageContent() {
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-semibold text-white">답변</p>
                 <span className="text-[11px] text-blue-200">
-                  confidence {chatAnswer.confidence.toFixed(3)}
+                  신뢰도 {chatAnswer.confidence.toFixed(3)}
                 </span>
               </div>
               <p className="whitespace-pre-wrap text-sm text-slate-200">{chatAnswer.answer}</p>
@@ -595,7 +653,7 @@ function DashboardPageContent() {
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-xs font-medium text-white">{displayTitle(source.title, source.content_id)}</p>
                           <span className="text-[11px] text-slate-400">
-                            chunk {source.chunk_index} 쨌 {source.similarity_score.toFixed(3)}
+                            청크 {source.chunk_index} · {source.similarity_score.toFixed(3)}
                           </span>
                         </div>
                         <p className="mt-1 whitespace-pre-wrap text-xs text-slate-300">
@@ -688,6 +746,23 @@ function DashboardPageContent() {
               </a>
             )}
           </div>
+        </div>
+      )}
+
+      {toasts.length > 0 && (
+        <div className="pointer-events-none fixed right-4 top-24 z-[70] space-y-2">
+          {toasts.map((toast) => (
+            <div
+              key={toast.id}
+              className={`rounded-xl border px-4 py-2 text-sm shadow-card ${
+                toast.kind === "success"
+                  ? "border-emerald-300/35 bg-emerald-500/20 text-emerald-100"
+                  : "border-red-300/35 bg-red-500/20 text-red-100"
+              }`}
+            >
+              {toast.text}
+            </div>
+          ))}
         </div>
       )}
     </div>
