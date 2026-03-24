@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -82,7 +82,7 @@ function StatusBadge({ status }: { status: ContentItem["status"] }) {
   return <span className={`${base} bg-slate-500/20 text-slate-200`}>대기</span>;
 }
 
-export default function DashboardPage() {
+function DashboardPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { token, initialized } = useAuth();
@@ -639,6 +639,14 @@ export default function DashboardPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<p className="text-sm text-slate-300">대시보드를 준비 중입니다...</p>}>
+      <DashboardPageContent />
+    </Suspense>
   );
 }
 
