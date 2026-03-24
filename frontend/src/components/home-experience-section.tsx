@@ -109,7 +109,7 @@ export function HomeExperienceSection() {
       title="회원가입 없이 먼저 써보기"
       description="공개 샘플 데이터 검색으로 SmartCurator의 핵심 경험을 바로 확인해 보세요."
     >
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:items-start">
         <div className="space-y-3 rounded-2xl border border-white/10 bg-slate-900/50 p-4">
           <div className="flex gap-2">
             <input
@@ -129,6 +129,14 @@ export function HomeExperienceSection() {
           </div>
           {error && <p className="text-xs text-slate-300">{error}</p>}
           <div className="space-y-3">
+            {results.length === 0 && !error && (
+              <div className="rounded-xl border border-dashed border-white/15 bg-slate-950/40 p-4">
+                <p className="text-sm font-medium text-slate-100">검색 전 가이드</p>
+                <p className="mt-1 text-xs leading-6 text-slate-300">
+                  키워드를 입력하고 샘플 검색을 누르면, 관련 콘텐츠의 제목과 핵심 발췌문을 바로 확인할 수 있어요.
+                </p>
+              </div>
+            )}
             {results.map((result) => (
               <article key={result.content_id} className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
                 <div className="flex items-start justify-between gap-3">
@@ -143,7 +151,7 @@ export function HomeExperienceSection() {
 
         <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-900/40 p-4">
           <h3 className="text-base font-semibold text-white">로그인하면 바로 확장됩니다</h3>
-          <ul className="space-y-2 text-sm text-slate-300">
+          <ul className="space-y-2 text-sm leading-6 text-slate-300">
             <li>내 링크/문서 업로드 후 자동 요약</li>
             <li>내 데이터만 대상으로 의미 검색</li>
             <li>근거 포함 AI 질의응답</li>

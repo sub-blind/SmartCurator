@@ -57,11 +57,6 @@ export function TopNav() {
           <Link href="/project-notes" className="transition hover:text-white">
             프로젝트 노트
           </Link>
-          {initialized && !token && (
-            <Link href="/login" className="transition hover:text-white">
-              로그인
-            </Link>
-          )}
         </nav>
 
         <div className="flex items-center gap-2">
