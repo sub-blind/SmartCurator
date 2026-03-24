@@ -113,7 +113,7 @@ export function HomeExperienceSection() {
     <Section
       id="try-without-signup"
       title="회원가입 없이 먼저 써보기"
-      description="공개 콘텐츠 의미 검색으로 SmartCurator의 핵심 경험을 바로 확인해 보세요."
+      description="공개 샘플 데이터 검색으로 SmartCurator의 핵심 경험을 바로 확인해 보세요."
     >
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         <div className="space-y-3 rounded-2xl border border-white/10 bg-slate-900/50 p-4">
@@ -128,9 +128,9 @@ export function HomeExperienceSection() {
               type="button"
               onClick={handleGuestSearch}
               disabled={searchDisabled}
-              className="rounded-xl bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+              className="min-w-[110px] whitespace-nowrap rounded-xl bg-brand px-4 py-2 text-sm font-semibold leading-none text-white hover:bg-blue-500 disabled:opacity-50"
             >
-              {loading ? "검색 중" : "공개 검색"}
+              {loading ? "검색 중" : "샘플 검색"}
             </button>
           </div>
           {error && <p className="text-xs text-slate-300">{error}</p>}

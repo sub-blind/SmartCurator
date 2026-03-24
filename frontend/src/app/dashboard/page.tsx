@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -16,6 +16,7 @@ const UI_NOISE_PATTERNS: RegExp[] = [
   /지면\s*아이콘/gi,
   /입력\s*\d{4}-\d{2}-\d{2}\s*\d{2}:\d{2}/gi,
 ];
+const CONTENTS_PAGE_SIZE = 4;
 
 function truncateText(text: string, maxLength: number) {
   const normalized = (text || "").replace(/\s+/g, " ").trim();
@@ -103,8 +104,24 @@ function DashboardPageContent() {
   const [expandedSearchResults, setExpandedSearchResults] = useState<Set<number>>(new Set());
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
   const [showQuickGuide, setShowQuickGuide] = useState(false);
+  const [currentContentsPage, setCurrentContentsPage] = useState(1);
 
   const ONBOARDING_DISMISS_KEY = "smartcurator_dashboard_quick_guide_dismissed_v1";
+
+  const sortedContents = useMemo(() => {
+    return [...contents].sort((a, b) => {
+      const aTime = new Date(a.updated_at || a.created_at).getTime();
+      const bTime = new Date(b.updated_at || b.created_at).getTime();
+      return bTime - aTime;
+    });
+  }, [contents]);
+
+  const totalContentsPages = Math.max(1, Math.ceil(sortedContents.length / CONTENTS_PAGE_SIZE));
+
+  const paginatedContents = useMemo(() => {
+    const startIndex = (currentContentsPage - 1) * CONTENTS_PAGE_SIZE;
+    return sortedContents.slice(startIndex, startIndex + CONTENTS_PAGE_SIZE);
+  }, [sortedContents, currentContentsPage]);
 
   const toggleSearchResult = (contentId: number) => {
     setExpandedSearchResults((prev) => {
@@ -137,6 +154,7 @@ function DashboardPageContent() {
     try {
       const data = await api.getMyContents(token);
       setContents(data);
+      setCurrentContentsPage(1);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "콘텐츠를 불러오지 못했습니다.");
     } finally {
@@ -160,6 +178,12 @@ function DashboardPageContent() {
       router.replace("/dashboard");
     }
   }, [initialized, token, onboardParam, router]);
+
+  useEffect(() => {
+    if (currentContentsPage > totalContentsPages) {
+      setCurrentContentsPage(totalContentsPages);
+    }
+  }, [currentContentsPage, totalContentsPages]);
 
   const handleSemanticSearch = async () => {
     if (!token || !searchQuery.trim()) return;
@@ -256,13 +280,14 @@ function DashboardPageContent() {
       )}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <section className="space-y-3 rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-card">
+        <section className="self-start space-y-3 rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-card lg:sticky lg:top-28">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-xl font-semibold text-white">내 콘텐츠</h1>
               <p className="text-xs text-slate-300">
                 저장한 기사와 노트의 처리 상태, 요약, 태그를 확인합니다.
               </p>
+              <p className="mt-1 text-[11px] text-slate-400">최근 업데이트 순 · 페이지당 4개</p>
             </div>
             <button
               type="button"
@@ -275,12 +300,12 @@ function DashboardPageContent() {
           {loading && <p className="text-xs text-slate-400">불러오는 중...</p>}
           {message && <p className="text-xs text-red-300">{message}</p>}
           <div className="mt-2 space-y-3">
-            {contents.length === 0 && !loading && (
+            {sortedContents.length === 0 && !loading && (
               <p className="text-sm text-slate-400">
                 아직 저장한 콘텐츠가 없습니다. 오른쪽 입력 폼에서 먼저 추가해 보세요.
               </p>
             )}
-            {contents.map((item) => (
+            {paginatedContents.map((item) => (
               <article
                 key={item.id}
                 className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 hover:border-brand/60"
@@ -382,6 +407,33 @@ function DashboardPageContent() {
               </article>
             ))}
           </div>
+          {sortedContents.length > CONTENTS_PAGE_SIZE && (
+            <div className="mt-3 flex items-center justify-between">
+              <p className="text-[11px] text-slate-400">
+                {currentContentsPage} / {totalContentsPages} 페이지
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCurrentContentsPage((prev) => Math.max(1, prev - 1))}
+                  disabled={currentContentsPage === 1}
+                  className="rounded-full border border-white/15 px-3 py-1 text-[11px] text-slate-200 disabled:opacity-40"
+                >
+                  이전
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCurrentContentsPage((prev) => Math.min(totalContentsPages, prev + 1))
+                  }
+                  disabled={currentContentsPage >= totalContentsPages}
+                  className="rounded-full border border-white/15 px-3 py-1 text-[11px] text-slate-200 disabled:opacity-40"
+                >
+                  다음
+                </button>
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="space-y-3 rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-card">
