@@ -62,6 +62,7 @@ class ContentService:
         result = await self.db.execute(
             select(Content)
             .where(Content.user_id == user_id)
+            .order_by(Content.created_at.desc(), Content.id.desc())
             .offset(skip)
             .limit(limit)
         )

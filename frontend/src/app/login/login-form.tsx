@@ -31,7 +31,11 @@ export function LoginForm() {
     try {
       const res = await api.login(email, password);
       login(res.access_token, email);
-      router.replace(nextPath as Route);
+      if (!isReauthMode && nextPath === "/dashboard") {
+        router.replace("/dashboard?onboard=1");
+      } else {
+        router.replace(nextPath as Route);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "로그인에 실패했습니다.");
     } finally {

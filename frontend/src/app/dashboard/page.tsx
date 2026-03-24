@@ -1,7 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { QuickAddForm } from "@/components/forms/quick-add-form";
@@ -11,7 +12,7 @@ import type { ChatAnswer, ContentItem, SearchResultItem } from "@/types/content"
 const UI_NOISE_PATTERNS: RegExp[] = [
   /공유(하기)?/gi,
   /페이스북|카카오톡|밴드|트위터/gi,
-  /URL복사|프린트|글자크기/gi,
+  /url복사|프린트|글자크기/gi,
   /지면\s*아이콘/gi,
   /입력\s*\d{4}-\d{2}-\d{2}\s*\d{2}:\d{2}/gi,
 ];
@@ -33,10 +34,23 @@ function cleanSnippet(text: string) {
   return cleaned;
 }
 
+function formatKoreanDateTime(value?: string | null) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function displayTitle(title: string, contentId: number) {
   const normalized = (title || "").trim();
-  if (!normalized) return `콘텐츠 #${contentId}`;
-  if (/^뉴스\s*\d+$/i.test(normalized)) return `저장 콘텐츠 #${contentId}`;
+  if (!normalized) return `肄섑뀗痢?#${contentId}`;
+  if (/^?댁뒪\s*\d+$/i.test(normalized)) return `???肄섑뀗痢?#${contentId}`;
   return normalized;
 }
 
@@ -46,12 +60,12 @@ function getMatchReason(query: string, result: SearchResultItem) {
     .split(/\s+/)
     .map((t) => t.trim())
     .filter((t) => t.length >= 2);
-  if (terms.length === 0) return "의미 유사도 기반 매칭";
+  if (terms.length === 0) return "?섎? ?좎궗??湲곕컲 留ㅼ묶";
 
   const haystack = `${result.title} ${result.summary} ${result.top_snippet} ${(result.tags || []).join(" ")}`.toLowerCase();
   const matched = terms.filter((term) => haystack.includes(term));
-  if (matched.length === 0) return "의미 유사도 기반 매칭";
-  return `매칭 근거: ${matched.slice(0, 3).join(", ")}`;
+  if (matched.length === 0) return "?섎? ?좎궗??湲곕컲 留ㅼ묶";
+  return `留ㅼ묶 洹쇨굅: ${matched.slice(0, 3).join(", ")}`;
 }
 
 function StatusBadge({ status }: { status: ContentItem["status"] }) {
@@ -69,7 +83,10 @@ function StatusBadge({ status }: { status: ContentItem["status"] }) {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { token, initialized } = useAuth();
+  const onboardParam = searchParams.get("onboard");
   const [contents, setContents] = useState<ContentItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -85,6 +102,9 @@ export default function DashboardPage() {
   const [selectedContent, setSelectedContent] = useState<ContentItem | null>(null);
   const [expandedSearchResults, setExpandedSearchResults] = useState<Set<number>>(new Set());
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
+  const [showQuickGuide, setShowQuickGuide] = useState(false);
+
+  const ONBOARDING_DISMISS_KEY = "smartcurator_dashboard_quick_guide_dismissed_v1";
 
   const toggleSearchResult = (contentId: number) => {
     setExpandedSearchResults((prev) => {
@@ -118,7 +138,7 @@ export default function DashboardPage() {
       const data = await api.getMyContents(token);
       setContents(data);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "콘텐츠를 불러오지 못했습니다.");
+      setMessage(err instanceof Error ? err.message : "肄섑뀗痢좊? 遺덈윭?ㅼ? 紐삵뻽?듬땲??");
     } finally {
       setLoading(false);
     }
@@ -129,6 +149,17 @@ export default function DashboardPage() {
       void loadContents();
     }
   }, [initialized, token]);
+
+  useEffect(() => {
+    if (!initialized || !token) return;
+    const dismissed = window.localStorage.getItem(ONBOARDING_DISMISS_KEY) === "1";
+    if (onboardParam === "1" || !dismissed) {
+      setShowQuickGuide(true);
+    }
+    if (onboardParam === "1") {
+      router.replace("/dashboard");
+    }
+  }, [initialized, token, onboardParam, router]);
 
   const handleSemanticSearch = async () => {
     if (!token || !searchQuery.trim()) return;
@@ -146,10 +177,10 @@ export default function DashboardPage() {
       });
       setSearchResults(response.results);
       if (response.results.length === 0) {
-        setSearchMessage("검색 결과가 없습니다. 더 구체적인 키워드로 다시 검색해보세요.");
+        setSearchMessage("寃??寃곌낵媛 ?놁뒿?덈떎. ??援ъ껜?곸씤 ?ㅼ썙?쒕줈 ?ㅼ떆 寃?됲빐蹂댁꽭??");
       }
     } catch (err) {
-      setSearchMessage(err instanceof Error ? err.message : "검색에 실패했습니다.");
+      setSearchMessage(err instanceof Error ? err.message : "寃?됱뿉 ?ㅽ뙣?덉뒿?덈떎.");
     } finally {
       setSearchLoading(false);
     }
@@ -163,36 +194,34 @@ export default function DashboardPage() {
       const response = await api.askAssistant(question.trim(), token);
       setChatAnswer(response);
     } catch (err) {
-      setChatMessage(err instanceof Error ? err.message : "답변 생성에 실패했습니다.");
+      setChatMessage(err instanceof Error ? err.message : "?듬? ?앹꽦???ㅽ뙣?덉뒿?덈떎.");
     } finally {
       setChatLoading(false);
     }
   };
 
   if (!initialized) {
-    return <p className="text-sm text-slate-300">초기화 중입니다...</p>;
+    return <p className="text-sm text-slate-300">珥덇린??以묒엯?덈떎...</p>;
   }
 
   if (!token) {
     return (
       <div className="mx-auto max-w-md space-y-4 rounded-3xl border border-white/10 bg-slate-900/60 p-8 text-center shadow-card">
-        <h1 className="text-2xl font-semibold text-white">로그인이 필요합니다</h1>
+        <h1 className="text-2xl font-semibold text-white">濡쒓렇?몄씠 ?꾩슂?⑸땲??</h1>
         <p className="mt-2 text-sm text-slate-300">
-          대시보드에서는 저장한 콘텐츠, 검색, AI 어시스트 기능을 확인할 수 있습니다.
+          ??쒕낫?쒖뿉?쒕뒗 ??ν븳 肄섑뀗痢? 寃?? AI ?댁떆?ㅽ듃 湲곕뒫???뺤씤?????덉뒿?덈떎.
         </p>
         <div className="mt-4 flex justify-center gap-3">
           <Link
             href="/login"
             className="rounded-full bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-blue-500"
           >
-            로그인
-          </Link>
+            濡쒓렇??          </Link>
           <Link
             href="/register"
             className="rounded-full border border-white/15 px-4 py-2 text-sm font-medium text-slate-100 hover:border-brand"
           >
-            회원가입
-          </Link>
+            ?뚯썝媛??          </Link>
         </div>
       </div>
     );
@@ -200,13 +229,37 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {showQuickGuide && (
+        <section className="rounded-3xl border border-blue-400/30 bg-blue-500/10 p-5 shadow-card">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-blue-200">Quick Guide</p>
+              <h2 className="mt-1 text-lg font-semibold text-white">지금 바로 쓰는 3단계</h2>
+              <p className="mt-1 text-sm text-slate-200">
+                1) 콘텐츠 추가 2) 의미 검색 3) AI 질의 순서로 시작하면 가장 빨리 결과를 볼 수 있어요.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setShowQuickGuide(false);
+                window.localStorage.setItem(ONBOARDING_DISMISS_KEY, "1");
+              }}
+              className="shrink-0 rounded-full border border-white/20 px-3 py-1 text-xs text-slate-100 hover:border-white/40"
+            >
+              가이드 닫기
+            </button>
+          </div>
+        </section>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <section className="space-y-3 rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-card">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-xl font-semibold text-white">내 콘텐츠</h1>
+              <h1 className="text-xl font-semibold text-white">??肄섑뀗痢?</h1>
               <p className="text-xs text-slate-300">
-                저장한 기사와 노트의 처리 상태, 요약, 태그를 확인합니다.
+                ??ν븳 湲곗궗? ?명듃??泥섎━ ?곹깭, ?붿빟, ?쒓렇瑜??뺤씤?⑸땲??
               </p>
             </div>
             <button
@@ -214,15 +267,15 @@ export default function DashboardPage() {
               onClick={() => loadContents()}
               className="shrink-0 whitespace-nowrap rounded-full border border-white/15 px-3 py-1 text-xs text-slate-200 hover:border-brand"
             >
-              새로고침
+              ?덈줈怨좎묠
             </button>
           </div>
-          {loading && <p className="text-xs text-slate-400">불러오는 중...</p>}
+          {loading && <p className="text-xs text-slate-400">遺덈윭?ㅻ뒗 以?..</p>}
           {message && <p className="text-xs text-red-300">{message}</p>}
           <div className="mt-2 space-y-3">
             {contents.length === 0 && !loading && (
               <p className="text-sm text-slate-400">
-                아직 저장한 콘텐츠가 없습니다. 오른쪽 입력 폼에서 먼저 추가해보세요.
+                ?꾩쭅 ??ν븳 肄섑뀗痢좉? ?놁뒿?덈떎. ?ㅻⅨ履??낅젰 ?쇱뿉??癒쇱? 異붽??대낫?몄슂.
               </p>
             )}
             {contents.map((item) => (
@@ -243,7 +296,7 @@ export default function DashboardPage() {
                       <StatusBadge status={item.status} />
                       {item.is_public && (
                         <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] text-slate-100">
-                          공개
+                          怨듦컻
                         </span>
                       )}
                       {item.content_type && (
@@ -260,7 +313,7 @@ export default function DashboardPage() {
                       rel="noreferrer"
                       className="text-[11px] text-blue-300 underline-offset-2 hover:underline"
                     >
-                      원문 보기
+                      ?먮Ц 蹂닿린
                     </a>
                   )}
                 </div>
@@ -271,7 +324,7 @@ export default function DashboardPage() {
                     className="mt-2 block w-full text-left text-xs text-slate-200"
                   >
                     {truncateText(item.summary, 260)}
-                    <span className="ml-1 text-[11px] text-blue-300">전체 보기</span>
+                    <span className="ml-1 text-[11px] text-blue-300">?꾩껜 蹂닿린</span>
                   </button>
                 )}
                 {item.tags && item.tags.length > 0 && (
@@ -286,37 +339,43 @@ export default function DashboardPage() {
                     ))}
                   </div>
                 )}
-                <div className="mt-3 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        await api.reprocessContent(item.id, token);
-                        setMessage("재처리 요청을 보냈습니다.");
-                      } catch (err) {
-                        setMessage(err instanceof Error ? err.message : "재처리 요청에 실패했습니다.");
-                      }
-                    }}
-                    className="rounded-full border border-white/15 px-3 py-1 text-[11px] text-slate-100 hover:border-blue-400"
-                  >
-                    재처리
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const ok = window.confirm("이 콘텐츠를 삭제하시겠습니까?");
-                      if (!ok) return;
-                      try {
-                        await api.deleteContent(item.id, token);
-                        setContents((prev) => prev.filter((content) => content.id !== item.id));
-                      } catch (err) {
-                        setMessage(err instanceof Error ? err.message : "삭제에 실패했습니다.");
-                      }
-                    }}
-                    className="rounded-full border border-red-500/40 px-3 py-1 text-[11px] text-red-200 hover:bg-red-500/10"
-                  >
-                    삭제
-                  </button>
+                <div className="mt-3 flex items-end justify-between gap-3">
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await api.reprocessContent(item.id, token);
+                          setMessage("재처리 요청을 보냈습니다.");
+                        } catch (err) {
+                          setMessage(err instanceof Error ? err.message : "재처리 요청에 실패했습니다.");
+                        }
+                      }}
+                      className="rounded-full border border-white/15 px-3 py-1 text-[11px] text-slate-100 hover:border-blue-400"
+                    >
+                      재처리
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const ok = window.confirm("이 콘텐츠를 삭제하시겠습니까?");
+                        if (!ok) return;
+                        try {
+                          await api.deleteContent(item.id, token);
+                          setContents((prev) => prev.filter((content) => content.id !== item.id));
+                        } catch (err) {
+                          setMessage(err instanceof Error ? err.message : "삭제에 실패했습니다.");
+                        }
+                      }}
+                      className="rounded-full border border-red-500/40 px-3 py-1 text-[11px] text-red-200 hover:bg-red-500/10"
+                    >
+                      삭제
+                    </button>
+                  </div>
+                  <p className="shrink-0 text-[11px] text-slate-400">
+                    {item.status === "completed" ? "처리 완료" : "최근 업데이트"}{" "}
+                    {formatKoreanDateTime(item.updated_at || item.created_at)}
+                  </p>
                 </div>
               </article>
             ))}
@@ -325,9 +384,9 @@ export default function DashboardPage() {
 
         <section className="space-y-3 rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-card">
           <div>
-            <h2 className="text-lg font-semibold text-white">콘텐츠 추가</h2>
+            <h2 className="text-lg font-semibold text-white">肄섑뀗痢?異붽?</h2>
             <p className="text-xs text-slate-300">
-              기사 URL이나 텍스트를 넣으면 백엔드가 요약, 태그, 벡터를 생성합니다.
+              湲곗궗 URL?대굹 ?띿뒪?몃? ?ｌ쑝硫?諛깆뿏?쒓? ?붿빟, ?쒓렇, 踰≫꽣瑜??앹꽦?⑸땲??
             </p>
           </div>
           <QuickAddForm token={token} onCreated={loadContents} />
@@ -337,16 +396,16 @@ export default function DashboardPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="space-y-4 rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-card">
           <div>
-            <h2 className="text-lg font-semibold text-white">의미론적 검색</h2>
+            <h2 className="text-lg font-semibold text-white">?섎?濡좎쟻 寃??</h2>
             <p className="text-xs text-slate-300">
-              저장한 콘텐츠를 키워드가 아니라 의미 기준으로 검색합니다. 결과는 짧은 핵심 snippet만 보여줍니다.
+              ??ν븳 肄섑뀗痢좊? ?ㅼ썙?쒓? ?꾨땲???섎? 湲곗??쇰줈 寃?됲빀?덈떎. 寃곌낵??吏㏃? ?듭떖 snippet留?蹂댁뿬以띾땲??
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             {[
-              { id: "strict", label: "정확", hint: "잡음 최소" },
-              { id: "balanced", label: "균형", hint: "기본" },
-              { id: "broad", label: "넓게", hint: "확장" },
+              { id: "strict", label: "?뺥솗", hint: "?≪쓬 理쒖냼" },
+              { id: "balanced", label: "洹좏삎", hint: "湲곕낯" },
+              { id: "broad", label: "?볤쾶", hint: "?뺤옣" },
             ].map((mode) => {
               const selected = searchMode === mode.id;
               return (
@@ -370,7 +429,7 @@ export default function DashboardPage() {
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="예: 로봇 투자, 덱스메이트, 흙의 날"
+              placeholder="예: 쌈짓돈 논란 핵심 쟁점"
               className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-white focus:border-brand focus:outline-none"
             />
             <button
@@ -379,13 +438,13 @@ export default function DashboardPage() {
               disabled={searchLoading}
               className="rounded-xl bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
             >
-              {searchLoading ? "검색 중..." : "검색"}
+              {searchLoading ? "검색 중.." : "검색"}
             </button>
           </div>
           {searchMessage && <p className="text-xs text-slate-300">{searchMessage}</p>}
           <div className="space-y-3">
             {searchResults.map((result) => {
-              const text = cleanSnippet(result.top_snippet || result.summary || "매칭된 snippet이 없습니다.");
+              const text = cleanSnippet(result.top_snippet || result.summary || "留ㅼ묶??snippet???놁뒿?덈떎.");
               const expanded = expandedSearchResults.has(result.content_id);
               const isLong = text.length > 220;
               return (
@@ -434,9 +493,9 @@ export default function DashboardPage() {
 
         <section className="space-y-4 rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-card">
           <div>
-            <h2 className="text-lg font-semibold text-white">AI 어시스트</h2>
+            <h2 className="text-lg font-semibold text-white">AI ?댁떆?ㅽ듃</h2>
             <p className="text-xs text-slate-300">
-              저장한 기사와 노트의 근거 chunk를 바탕으로 질문에 답합니다.
+              ??ν븳 湲곗궗? ?명듃??洹쇨굅 chunk瑜?諛뷀깢?쇰줈 吏덈Ц???듯빀?덈떎.
             </p>
           </div>
           <div className="space-y-3">
@@ -444,7 +503,7 @@ export default function DashboardPage() {
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               rows={4}
-              placeholder="예: LG CNS가 어디에 투자했어?, 흙의 날 기사 핵심만 정리해줘"
+              placeholder="?? LG CNS媛 ?대뵒???ъ옄?덉뼱?, ?숈쓽 ??湲곗궗 ?듭떖留??뺣━?댁쨾"
               className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-white focus:border-brand focus:outline-none"
             />
             <button
@@ -453,14 +512,14 @@ export default function DashboardPage() {
               disabled={chatLoading}
               className="rounded-xl bg-emerald-500/90 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
             >
-              {chatLoading ? "답변 생성 중..." : "질문하기"}
+              {chatLoading ? "?듬? ?앹꽦 以?.." : "吏덈Ц?섍린"}
             </button>
           </div>
           {chatMessage && <p className="text-xs text-red-300">{chatMessage}</p>}
           {chatAnswer && (
             <div className="space-y-3 rounded-2xl border border-white/10 bg-slate-950/60 p-4">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-white">답변</p>
+                <p className="text-sm font-semibold text-white">?듬?</p>
                 <span className="text-[11px] text-blue-200">
                   confidence {chatAnswer.confidence.toFixed(3)}
                 </span>
@@ -468,7 +527,7 @@ export default function DashboardPage() {
               <p className="whitespace-pre-wrap text-sm text-slate-200">{chatAnswer.answer}</p>
               {chatAnswer.sources.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs font-medium text-slate-300">근거 출처</p>
+                  <p className="text-xs font-medium text-slate-300">洹쇨굅 異쒖쿂</p>
                   {chatAnswer.sources.map((source, index) => {
                     const sourceKey = `${source.content_id}-${source.chunk_index}-${index}`;
                     const expanded = expandedSources.has(sourceKey);
@@ -482,7 +541,7 @@ export default function DashboardPage() {
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-xs font-medium text-white">{displayTitle(source.title, source.content_id)}</p>
                           <span className="text-[11px] text-slate-400">
-                            chunk {source.chunk_index} · {source.similarity_score.toFixed(3)}
+                            chunk {source.chunk_index} 쨌 {source.similarity_score.toFixed(3)}
                           </span>
                         </div>
                         <p className="mt-1 whitespace-pre-wrap text-xs text-slate-300">
@@ -522,7 +581,7 @@ export default function DashboardPage() {
               <div>
                 <h3 className="text-lg font-semibold text-white">{selectedContent.title}</h3>
                 <p className="mt-1 text-xs text-slate-400">
-                  생성 {new Date(selectedContent.created_at).toLocaleString()}
+                  ?앹꽦 {new Date(selectedContent.created_at).toLocaleString()}
                 </p>
               </div>
               <button
@@ -530,14 +589,14 @@ export default function DashboardPage() {
                 onClick={() => setSelectedContent(null)}
                 className="rounded-full border border-white/15 px-3 py-1 text-xs text-slate-200 hover:border-brand"
               >
-                닫기
+                ?リ린
               </button>
             </div>
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <StatusBadge status={selectedContent.status} />
               {selectedContent.is_public && (
-                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] text-slate-100">공개</span>
+                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] text-slate-100">怨듦컻</span>
               )}
               <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-200">
                 {selectedContent.content_type}
@@ -545,15 +604,15 @@ export default function DashboardPage() {
             </div>
 
             <div className="mt-4 space-y-2">
-              <p className="text-xs font-semibold text-slate-300">요약 전체</p>
+              <p className="text-xs font-semibold text-slate-300">?붿빟 ?꾩껜</p>
               <p className="whitespace-pre-wrap text-sm leading-6 text-slate-100">
-                {selectedContent.summary || "요약이 아직 생성되지 않았습니다."}
+                {selectedContent.summary || "?붿빟???꾩쭅 ?앹꽦?섏? ?딆븯?듬땲??"}
               </p>
             </div>
 
             {selectedContent.tags && selectedContent.tags.length > 0 && (
               <div className="mt-4">
-                <p className="mb-2 text-xs font-semibold text-slate-300">태그</p>
+                <p className="mb-2 text-xs font-semibold text-slate-300">?쒓렇</p>
                 <div className="flex flex-wrap gap-1.5">
                   {selectedContent.tags.map((tag) => (
                     <span key={tag} className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-200">
@@ -571,7 +630,7 @@ export default function DashboardPage() {
                 rel="noreferrer"
                 className="mt-5 inline-block text-xs text-blue-300 underline-offset-2 hover:underline"
               >
-                원문 보기
+                ?먮Ц 蹂닿린
               </a>
             )}
           </div>
@@ -580,3 +639,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+
