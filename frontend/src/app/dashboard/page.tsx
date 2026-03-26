@@ -25,6 +25,11 @@ type DashboardToast = {
   text: string;
 };
 
+type TagStat = {
+  tag: string;
+  count: number;
+};
+
 function truncateText(text: string, maxLength: number) {
   const normalized = (text || "").replace(/\s+/g, " ").trim();
   if (normalized.length <= maxLength) {
@@ -113,6 +118,7 @@ function DashboardPageContent() {
   const [showQuickGuide, setShowQuickGuide] = useState(false);
   const [currentContentsPage, setCurrentContentsPage] = useState(1);
   const [toasts, setToasts] = useState<DashboardToast[]>([]);
+  const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
 
   const ONBOARDING_DISMISS_KEY = "smartcurator_dashboard_quick_guide_dismissed_v1";
   const hasLoadedOnceRef = useRef(false);
@@ -127,12 +133,32 @@ function DashboardPageContent() {
     });
   }, [contents]);
 
-  const totalContentsPages = Math.max(1, Math.ceil(sortedContents.length / CONTENTS_PAGE_SIZE));
+  const tagStats = useMemo<TagStat[]>(() => {
+    const counter = new Map<string, number>();
+    for (const item of sortedContents) {
+      const tags = item.tags || [];
+      const uniqueTags = new Set(tags.map((tag) => (tag || "").trim()).filter(Boolean));
+      for (const tag of uniqueTags) {
+        counter.set(tag, (counter.get(tag) || 0) + 1);
+      }
+    }
+    return [...counter.entries()]
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => (b.count !== a.count ? b.count - a.count : a.tag.localeCompare(b.tag, "ko-KR")))
+      .slice(0, 15);
+  }, [sortedContents]);
+
+  const filteredContents = useMemo(() => {
+    if (!activeTagFilter) return sortedContents;
+    return sortedContents.filter((item) => (item.tags || []).includes(activeTagFilter));
+  }, [sortedContents, activeTagFilter]);
+
+  const totalContentsPages = Math.max(1, Math.ceil(filteredContents.length / CONTENTS_PAGE_SIZE));
 
   const paginatedContents = useMemo(() => {
     const startIndex = (currentContentsPage - 1) * CONTENTS_PAGE_SIZE;
-    return sortedContents.slice(startIndex, startIndex + CONTENTS_PAGE_SIZE);
-  }, [sortedContents, currentContentsPage]);
+    return filteredContents.slice(startIndex, startIndex + CONTENTS_PAGE_SIZE);
+  }, [filteredContents, currentContentsPage]);
 
   const toggleSearchResult = (contentId: number) => {
     setExpandedSearchResults((prev) => {
@@ -346,6 +372,23 @@ function DashboardPageContent() {
                 저장한 기사와 노트의 처리 상태, 요약, 태그를 확인합니다.
               </p>
               <p className="mt-1 text-[11px] text-slate-400">최근 업데이트 순 · 페이지당 4개</p>
+              {activeTagFilter && (
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="rounded-full border border-blue-300/40 bg-blue-500/20 px-2 py-0.5 text-[11px] text-blue-100">
+                    #{activeTagFilter}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTagFilter(null);
+                      setCurrentContentsPage(1);
+                    }}
+                    className="text-[11px] text-slate-300 underline-offset-2 hover:underline"
+                  >
+                    필터 해제
+                  </button>
+                </div>
+              )}
             </div>
             <button
               type="button"
@@ -358,9 +401,11 @@ function DashboardPageContent() {
           {loading && <p className="text-xs text-slate-400">불러오는 중...</p>}
           {message && <p className="text-xs text-red-300">{message}</p>}
           <div className="mt-2 space-y-3">
-            {sortedContents.length === 0 && !loading && (
+            {filteredContents.length === 0 && !loading && (
               <p className="text-sm text-slate-400">
-                아직 저장한 콘텐츠가 없습니다. 오른쪽 입력 폼에서 먼저 추가해 보세요.
+                {activeTagFilter
+                  ? `#${activeTagFilter} 태그에 해당하는 콘텐츠가 없습니다.`
+                  : "아직 저장한 콘텐츠가 없습니다. 오른쪽 입력 폼에서 먼저 추가해 보세요."}
               </p>
             )}
             {paginatedContents.map((item) => (
@@ -465,7 +510,7 @@ function DashboardPageContent() {
               </article>
             ))}
           </div>
-          {sortedContents.length > CONTENTS_PAGE_SIZE && (
+          {filteredContents.length > CONTENTS_PAGE_SIZE && (
             <div className="mt-3 flex items-center justify-between">
               <p className="text-[11px] text-slate-400">
                 {currentContentsPage} / {totalContentsPages} 페이지
@@ -502,6 +547,39 @@ function DashboardPageContent() {
             </p>
           </div>
           <QuickAddForm token={token} onCreated={() => void loadContents({ resetPage: true })} />
+          <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-white">자주 쓰는 태그</h3>
+              <span className="text-[11px] text-slate-400">Top 15</span>
+            </div>
+            {tagStats.length === 0 ? (
+              <p className="mt-3 text-xs text-slate-400">태그가 있는 콘텐츠를 추가하면 여기 표시됩니다.</p>
+            ) : (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {tagStats.map((item) => {
+                  const active = activeTagFilter === item.tag;
+                  return (
+                    <button
+                      key={item.tag}
+                      type="button"
+                      onClick={() => {
+                        setActiveTagFilter((prev) => (prev === item.tag ? null : item.tag));
+                        setCurrentContentsPage(1);
+                      }}
+                      className={`rounded-full px-2.5 py-1 text-[11px] transition ${
+                        active
+                          ? "border border-blue-300/50 bg-blue-500/25 text-blue-100"
+                          : "border border-white/15 bg-slate-900/60 text-slate-200 hover:border-white/35"
+                      }`}
+                      title={`#${item.tag} 콘텐츠 ${item.count}개`}
+                    >
+                      #{item.tag} ({item.count})
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </section>
       </div>
 
