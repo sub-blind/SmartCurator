@@ -149,7 +149,7 @@ export function HomeExperienceSection() {
           </div>
         </div>
 
-        <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-900/40 p-4">
+        <div className="flex min-h-[250px] flex-col justify-center space-y-4 rounded-2xl border border-white/10 bg-slate-900/40 p-4">
           <h3 className="text-base font-semibold text-white">로그인하면 바로 확장됩니다</h3>
           <ul className="space-y-2 text-sm leading-6 text-slate-300">
             <li>내 링크/문서 업로드 후 자동 요약</li>

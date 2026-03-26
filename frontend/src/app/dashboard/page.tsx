@@ -750,19 +750,21 @@ function DashboardPageContent() {
       )}
 
       {toasts.length > 0 && (
-        <div className="pointer-events-none fixed right-4 top-24 z-[70] space-y-2">
-          {toasts.map((toast) => (
-            <div
-              key={toast.id}
-              className={`rounded-xl border px-4 py-2 text-sm shadow-card ${
-                toast.kind === "success"
-                  ? "border-emerald-300/35 bg-emerald-500/20 text-emerald-100"
-                  : "border-red-300/35 bg-red-500/20 text-red-100"
-              }`}
-            >
-              {toast.text}
-            </div>
-          ))}
+        <div className="pointer-events-none fixed inset-x-0 top-24 z-[70] mx-auto flex w-full max-w-6xl justify-end px-6 sm:px-10">
+          <div className="space-y-2">
+            {toasts.map((toast) => (
+              <div
+                key={toast.id}
+                className={`rounded-xl border px-4 py-2 text-sm shadow-card ${
+                  toast.kind === "success"
+                    ? "border-emerald-300/35 bg-emerald-500/20 text-emerald-100"
+                    : "border-red-300/35 bg-red-500/20 text-red-100"
+                }`}
+              >
+                {toast.text}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
