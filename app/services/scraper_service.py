@@ -2,6 +2,7 @@
 import re
 from typing import Dict, Optional
 from urllib.parse import parse_qs, urlparse
+from xml.etree.ElementTree import ParseError
 
 import requests
 from bs4 import BeautifulSoup
@@ -29,14 +30,18 @@ class ScraperService:
     async def extract_content(self, url: str) -> Dict[str, str]:
         """URL에서 본문 텍스트를 추출한다. 실패 시 reader fallback을 시도한다."""
         try:
-            if self._is_youtube_url(url):
-                return await self._extract_youtube_transcript(url)
+            normalized_url = (url or "").strip()
+            if self._is_youtube_url(normalized_url):
+                normalized_url = self._normalize_youtube_url(normalized_url)
 
-            primary = await self._extract_via_html(url)
+            if self._is_youtube_url(normalized_url):
+                return await self._extract_youtube_transcript(normalized_url)
+
+            primary = await self._extract_via_html(normalized_url)
             if self._is_usable_text(primary.get("content", "")):
                 return primary
 
-            fallback = await self._extract_via_reader(url)
+            fallback = await self._extract_via_reader(normalized_url)
             if self._is_usable_text(fallback.get("content", "")):
                 return fallback
 
@@ -64,13 +69,16 @@ class ScraperService:
         """YouTube URL에서 자막을 추출한다."""
         video_id = self._extract_youtube_video_id(url)
         if not video_id:
-            return {"error": "유튜브 URL에서 영상 ID를 찾을 수 없습니다.", "success": False}
+            return {
+                "error": "유효한 유튜브 링크가 아닙니다. 예: https://www.youtube.com/watch?v=VIDEO_ID",
+                "success": False,
+            }
 
         loop = asyncio.get_event_loop()
         try:
             transcript_items = await loop.run_in_executor(
                 None,
-                lambda: YouTubeTranscriptApi.get_transcript(video_id, languages=["ko", "en"]),
+                lambda: self._fetch_best_youtube_transcript(video_id),
             )
         except NoTranscriptFound:
             return {
@@ -81,6 +89,14 @@ class ScraperService:
             return {"error": "해당 유튜브 영상은 자막이 비활성화되어 있습니다.", "success": False}
         except VideoUnavailable:
             return {"error": "해당 유튜브 영상을 사용할 수 없습니다.", "success": False}
+        except ParseError:
+            return {
+                "error": (
+                    "유튜브 자막 응답 파싱에 실패했습니다. "
+                    "영상 자막 비공개/제한, 일시 네트워크 문제, 또는 유튜브 차단 가능성을 확인해주세요."
+                ),
+                "success": False,
+            }
         except Exception as e:
             return {"error": f"유튜브 자막 추출 실패: {e}", "success": False}
 
@@ -226,19 +242,66 @@ class ScraperService:
             path = parsed.path or ""
             if "youtu.be" in host:
                 video_id = path.strip("/").split("/")[0]
-                return video_id or None
+                return video_id if self._is_valid_youtube_video_id(video_id) else None
 
             if "youtube.com" in host:
-                if path == "/watch":
-                    query = parse_qs(parsed.query or "")
-                    values = query.get("v", [])
-                    return values[0] if values else None
+                query = parse_qs(parsed.query or "")
+                values = query.get("v", [])
+                if values and self._is_valid_youtube_video_id(values[0]):
+                    return values[0]
                 if path.startswith("/shorts/") or path.startswith("/embed/"):
                     parts = [p for p in path.split("/") if p]
-                    return parts[1] if len(parts) >= 2 else None
+                    if len(parts) >= 2 and self._is_valid_youtube_video_id(parts[1]):
+                        return parts[1]
         except Exception:
             return None
         return None
+
+    def _normalize_youtube_url(self, url: str) -> str:
+        """자주 입력되는 유튜브 URL 오타를 보정한다."""
+        try:
+            parsed = urlparse(url)
+            host = (parsed.netloc or "").lower()
+            path = parsed.path or ""
+            if "youtube.com" in host and path == "/waatch":
+                return url.replace("/waatch", "/watch", 1)
+        except Exception:
+            return url
+        return url
+
+    def _is_valid_youtube_video_id(self, video_id: str) -> bool:
+        return bool(video_id and re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id))
+
+    def _fetch_best_youtube_transcript(self, video_id: str) -> list[dict]:
+        """가능한 자막을 우선순위로 시도해 transcript를 가져온다."""
+        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+
+        # 1) 수동/번역 가능 자막 우선
+        try:
+            preferred = transcript_list.find_transcript(["ko", "en"])
+            return preferred.fetch()
+        except Exception:
+            pass
+
+        # 2) 자동 생성 자막
+        try:
+            generated = transcript_list.find_generated_transcript(["ko", "en"])
+            return generated.fetch()
+        except Exception:
+            pass
+
+        # 3) 남아있는 자막을 순차 시도 (일부 영상은 특정 트랙만 성공)
+        last_error: Exception | None = None
+        for transcript in transcript_list:
+            try:
+                return transcript.fetch()
+            except Exception as e:
+                last_error = e
+                continue
+
+        if last_error:
+            raise last_error
+        raise NoTranscriptFound(video_id, ["ko", "en"], transcript_data=None)
 
     def _fetch_youtube_title(self, url: str, video_id: str) -> str:
         oembed_url = f"https://www.youtube.com/oembed?url={url}&format=json"
