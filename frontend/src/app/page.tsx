@@ -9,27 +9,27 @@ export default function HomePage() {
 
       <Section
         id="why-now"
-        title="왜 이 사이트가 필요한가"
-        description="정보를 많이 모으는 것보다, 필요할 때 정확히 꺼내 쓰는 경험에 집중했습니다."
+        title="뭘 도와주나요?"
+        description="많이 쌓는 것보다, 나중에 꺼내 쓰는 쪽을 먼저 생각했어요."
       >
         <div className="grid gap-4 md:grid-cols-3">
           {[
             {
-              title: "수집 피로 감소",
-              detail: "링크, 메모, 파일을 한곳에 모으고 자동으로 정리해 중복 탐색 시간을 줄입니다.",
+              title: "한곳에만 모아두기",
+              detail: "링크·메모·파일을 여기저기 두지 말고 한 저장고에 넣고, 요약·태그는 자동으로 얹습니다.",
             },
             {
-              title: "맥락 기반 탐색",
-              detail: "정확한 키워드를 몰라도 의미가 비슷한 내용을 찾아줍니다.",
+              title: "표현이 달라도 찾기",
+              detail: "검색할 때 딱 맞는 단어가 안 떠올라도, 비슷한 뜻으로 연결된 걸 찾아줍니다.",
             },
             {
-              title: "실행 가능한 답변",
-              detail: "AI 답변과 근거를 같이 확인해 바로 다음 액션으로 이어집니다.",
+              title: "답만 보지 않기",
+              detail: "AI가 말한 근거 문장을 같이 보여줘서, 어디 기준인지 확인하기 쉽게 했어요.",
             },
           ].map((item) => (
             <article key={item.title} className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
               <h3 className="text-base font-semibold text-white">{item.title}</h3>
-              <p className="mt-2 text-sm text-slate-300">{item.detail}</p>
+              <p className="mt-2 text-sm leading-relaxed text-slate-200">{item.detail}</p>
             </article>
           ))}
         </div>

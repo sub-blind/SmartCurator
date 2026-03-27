@@ -12,7 +12,7 @@ export function QuickActionsSection() {
     <Section
       id="quick-start"
       title="빠른 사용 가이드"
-      description="로그인과 콘텐츠 등록을 한 화면에서 수행해 전체 흐름을 빠르게 확인할 수 있습니다."
+      description="로그인하고 바로 링크나 메모를 넣어 볼 수 있는 화면이에요."
     >
       <div className="grid gap-6 lg:grid-cols-2">
         <LoginCard onTokenReady={setToken} />
