@@ -47,7 +47,7 @@ export function TopNav() {
           SmartCurator
         </Link>
 
-        <nav className="flex items-center gap-3 text-sm text-slate-300 sm:gap-6">
+        <nav className="flex items-center gap-3 text-base text-slate-200 sm:gap-6">
           <Link href="/" className="transition hover:text-white">
             소개
           </Link>
@@ -62,7 +62,7 @@ export function TopNav() {
         <div className="flex items-center gap-2">
           {initialized && token ? (
             <>
-              <span className="hidden text-xs text-slate-300 sm:inline">{userEmail ?? "로그인됨"}</span>
+              <span className="hidden text-sm text-slate-200 sm:inline">{userEmail ?? "로그인됨"}</span>
               <button
                 type="button"
                 onClick={handleLogout}

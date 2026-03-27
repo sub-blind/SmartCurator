@@ -20,7 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthProvider>
           <div className="relative min-h-screen">
             <TopNav />
-            <main className="mx-auto w-full max-w-6xl px-6 pb-16 pt-28 sm:px-10">{children}</main>
+            <main className="mx-auto w-full max-w-6xl px-6 pb-16 pt-28 text-[15px] sm:px-10 sm:text-base">{children}</main>
           </div>
         </AuthProvider>
       </body>

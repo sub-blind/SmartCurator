@@ -1,9 +1,16 @@
 ﻿import asyncio
+import re
 from typing import Dict, Optional
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import requests
 from bs4 import BeautifulSoup
+from youtube_transcript_api import (
+    NoTranscriptFound,
+    TranscriptsDisabled,
+    VideoUnavailable,
+    YouTubeTranscriptApi,
+)
 
 
 class ScraperService:
@@ -22,6 +29,9 @@ class ScraperService:
     async def extract_content(self, url: str) -> Dict[str, str]:
         """URL에서 본문 텍스트를 추출한다. 실패 시 reader fallback을 시도한다."""
         try:
+            if self._is_youtube_url(url):
+                return await self._extract_youtube_transcript(url)
+
             primary = await self._extract_via_html(url)
             if self._is_usable_text(primary.get("content", "")):
                 return primary
@@ -49,6 +59,43 @@ class ScraperService:
             return {"error": f"네트워크 오류: {e}", "success": False}
         except Exception as e:
             return {"error": f"스크래핑 실패: {e}", "success": False}
+
+    async def _extract_youtube_transcript(self, url: str) -> Dict[str, str]:
+        """YouTube URL에서 자막을 추출한다."""
+        video_id = self._extract_youtube_video_id(url)
+        if not video_id:
+            return {"error": "유튜브 URL에서 영상 ID를 찾을 수 없습니다.", "success": False}
+
+        loop = asyncio.get_event_loop()
+        try:
+            transcript_items = await loop.run_in_executor(
+                None,
+                lambda: YouTubeTranscriptApi.get_transcript(video_id, languages=["ko", "en"]),
+            )
+        except NoTranscriptFound:
+            return {
+                "error": "해당 유튜브 영상에 사용 가능한 자막이 없습니다. 자막이 있는 영상으로 시도해주세요.",
+                "success": False,
+            }
+        except TranscriptsDisabled:
+            return {"error": "해당 유튜브 영상은 자막이 비활성화되어 있습니다.", "success": False}
+        except VideoUnavailable:
+            return {"error": "해당 유튜브 영상을 사용할 수 없습니다.", "success": False}
+        except Exception as e:
+            return {"error": f"유튜브 자막 추출 실패: {e}", "success": False}
+
+        transcript_text = self._clean_youtube_transcript(transcript_items)
+        if len(transcript_text) < 40:
+            return {"error": "유튜브 자막 길이가 너무 짧아 요약하기 어렵습니다.", "success": False}
+
+        title = await loop.run_in_executor(None, lambda: self._fetch_youtube_title(url, video_id))
+        return {
+            "title": title,
+            "content": transcript_text,
+            "description": "유튜브 자막 기반 추출",
+            "url": url,
+            "success": True,
+        }
 
     async def _extract_via_html(self, url: str) -> Dict[str, str]:
         loop = asyncio.get_event_loop()
@@ -164,6 +211,61 @@ class ScraperService:
         if len(normalized) < 120:
             return False
         return True
+
+    def _is_youtube_url(self, url: str) -> bool:
+        try:
+            host = (urlparse(url).netloc or "").lower()
+            return "youtube.com" in host or "youtu.be" in host
+        except Exception:
+            return False
+
+    def _extract_youtube_video_id(self, url: str) -> Optional[str]:
+        try:
+            parsed = urlparse(url)
+            host = (parsed.netloc or "").lower()
+            path = parsed.path or ""
+            if "youtu.be" in host:
+                video_id = path.strip("/").split("/")[0]
+                return video_id or None
+
+            if "youtube.com" in host:
+                if path == "/watch":
+                    query = parse_qs(parsed.query or "")
+                    values = query.get("v", [])
+                    return values[0] if values else None
+                if path.startswith("/shorts/") or path.startswith("/embed/"):
+                    parts = [p for p in path.split("/") if p]
+                    return parts[1] if len(parts) >= 2 else None
+        except Exception:
+            return None
+        return None
+
+    def _fetch_youtube_title(self, url: str, video_id: str) -> str:
+        oembed_url = f"https://www.youtube.com/oembed?url={url}&format=json"
+        try:
+            response = self.session.get(oembed_url, timeout=self.timeout)
+            if response.ok:
+                payload = response.json() or {}
+                title = (payload.get("title") or "").strip()
+                if title:
+                    return title
+        except Exception:
+            pass
+        return f"YouTube 영상 {video_id}"
+
+    def _clean_youtube_transcript(self, items: list[dict]) -> str:
+        texts: list[str] = []
+        for item in items:
+            raw = str(item.get("text", "")).strip()
+            if not raw:
+                continue
+            cleaned = re.sub(r"\[[^\]]+\]", " ", raw)
+            cleaned = " ".join(cleaned.split())
+            if cleaned:
+                texts.append(cleaned)
+
+        merged = " ".join(texts)
+        return self._clean_content(merged)
 
     def _clean_content(self, text: str) -> str:
         if not text:

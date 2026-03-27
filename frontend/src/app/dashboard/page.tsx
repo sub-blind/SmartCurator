@@ -67,6 +67,16 @@ function displayTitle(title: string, contentId: number) {
   return normalized;
 }
 
+function isYouTubeUrl(url?: string | null) {
+  if (!url) return false;
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host.includes("youtube.com") || host.includes("youtu.be");
+  } catch {
+    return false;
+  }
+}
+
 function getMatchReason(query: string, result: SearchResultItem) {
   const terms = (query || "")
     .toLowerCase()
@@ -152,6 +162,16 @@ function DashboardPageContent() {
     if (!activeTagFilter) return sortedContents;
     return sortedContents.filter((item) => (item.tags || []).includes(activeTagFilter));
   }, [sortedContents, activeTagFilter]);
+
+  const pendingCount = useMemo(
+    () => sortedContents.filter((item) => item.status === "pending").length,
+    [sortedContents],
+  );
+  const processingCount = useMemo(
+    () => sortedContents.filter((item) => item.status === "processing").length,
+    [sortedContents],
+  );
+  const activeQueueCount = pendingCount + processingCount;
 
   const totalContentsPages = Math.max(1, Math.ceil(filteredContents.length / CONTENTS_PAGE_SIZE));
 
@@ -368,10 +388,10 @@ function DashboardPageContent() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-xl font-semibold text-white">내 콘텐츠</h1>
-              <p className="text-xs text-slate-300">
+              <p className="text-sm text-slate-200">
                 저장한 기사와 노트의 처리 상태, 요약, 태그를 확인합니다.
               </p>
-              <p className="mt-1 text-[11px] text-slate-400">최근 업데이트 순 · 페이지당 4개</p>
+              <p className="mt-1 text-xs text-slate-300">최근 업데이트 순 · 페이지당 4개</p>
               {activeTagFilter && (
                 <div className="mt-2 flex items-center gap-2">
                   <span className="rounded-full border border-blue-300/40 bg-blue-500/20 px-2 py-0.5 text-[11px] text-blue-100">
@@ -398,6 +418,19 @@ function DashboardPageContent() {
               새로고침
             </button>
           </div>
+          {activeQueueCount > 0 && (
+            <div className="rounded-2xl border border-sky-300/25 bg-sky-500/10 p-3">
+              <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+                <p className="text-sky-100">처리 큐 진행 중</p>
+                <p className="text-sky-200">
+                  대기 {pendingCount}건 · 처리중 {processingCount}건
+                </p>
+              </div>
+              <div className="indeterminate-track">
+                <div className="indeterminate-bar" />
+              </div>
+            </div>
+          )}
           {loading && <p className="text-xs text-slate-400">불러오는 중...</p>}
           {message && <p className="text-xs text-red-300">{message}</p>}
           <div className="mt-2 space-y-3">
@@ -432,6 +465,11 @@ function DashboardPageContent() {
                       {item.content_type && (
                         <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-200">
                           {item.content_type}
+                        </span>
+                      )}
+                      {isYouTubeUrl(item.url) && (
+                        <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-[11px] text-red-100">
+                          youtube
                         </span>
                       )}
                     </div>
@@ -791,6 +829,11 @@ function DashboardPageContent() {
               <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-200">
                 {selectedContent.content_type}
               </span>
+              {isYouTubeUrl(selectedContent.url) && (
+                <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-[11px] text-red-100">
+                  youtube
+                </span>
+              )}
             </div>
 
             <div className="mt-4 space-y-2">

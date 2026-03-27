@@ -8,7 +8,7 @@
 }
 
 body {
-  @apply min-h-screen bg-slate-950 text-slate-100 antialiased;
+  @apply min-h-screen bg-slate-950 text-slate-50 antialiased;
 }
 
 .gradient-ring {
@@ -19,6 +19,29 @@ body {
 
 .glass-card {
   @apply border border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_20px_45px_rgba(15,23,42,0.35)];
+}
+
+.indeterminate-track {
+  @apply relative h-2 overflow-hidden rounded-full bg-white/10;
+}
+
+.indeterminate-bar {
+  position: absolute;
+  top: 0;
+  left: -35%;
+  width: 35%;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(56, 189, 248, 0.18), rgba(96, 165, 250, 0.85), rgba(56, 189, 248, 0.18));
+  animation: indeterminate-slide 1.4s ease-in-out infinite;
+}
+
+@keyframes indeterminate-slide {
+  0% {
+    left: -35%;
+  }
+  100% {
+    left: 100%;
+  }
 }
 
 
