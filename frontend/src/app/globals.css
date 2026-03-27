@@ -8,13 +8,14 @@
 }
 
 body {
-  @apply min-h-screen bg-slate-950 text-slate-50 antialiased;
+  @apply min-h-screen bg-slate-950 text-slate-100 antialiased;
 }
 
+/* 배경 장식은 약하게: 본문 대비(WCAG) 유지 */
 .gradient-ring {
-  background: radial-gradient(circle at 10% 20%, rgba(37, 99, 235, 0.35), transparent 40%),
-    radial-gradient(circle at 80% 10%, rgba(168, 85, 247, 0.35), transparent 35%),
-    radial-gradient(circle at 50% 80%, rgba(14, 165, 233, 0.25), transparent 45%);
+  background: radial-gradient(circle at 10% 20%, rgba(37, 99, 235, 0.14), transparent 42%),
+    radial-gradient(circle at 80% 10%, rgba(168, 85, 247, 0.12), transparent 38%),
+    radial-gradient(circle at 50% 80%, rgba(14, 165, 233, 0.1), transparent 48%);
 }
 
 .glass-card {

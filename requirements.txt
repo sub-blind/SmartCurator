@@ -41,7 +41,7 @@ flower==2.0.1
 # Web Scraping
 beautifulsoup4==4.12.2
 lxml==4.9.3
-youtube-transcript-api==0.6.2
+youtube-transcript-api==1.1.0
 
 
 # AI & ML (2025년 9월 안정 버전)

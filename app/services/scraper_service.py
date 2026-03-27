@@ -1,6 +1,6 @@
-﻿import asyncio
+import asyncio
 import re
-from typing import Dict, Optional
+from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urlparse
 from xml.etree.ElementTree import ParseError
 
@@ -75,30 +75,46 @@ class ScraperService:
             }
 
         loop = asyncio.get_event_loop()
-        try:
-            transcript_items = await loop.run_in_executor(
-                None,
-                lambda: self._fetch_best_youtube_transcript(video_id),
-            )
-        except NoTranscriptFound:
-            return {
-                "error": "해당 유튜브 영상에 사용 가능한 자막이 없습니다. 자막이 있는 영상으로 시도해주세요.",
-                "success": False,
-            }
-        except TranscriptsDisabled:
-            return {"error": "해당 유튜브 영상은 자막이 비활성화되어 있습니다.", "success": False}
-        except VideoUnavailable:
-            return {"error": "해당 유튜브 영상을 사용할 수 없습니다.", "success": False}
-        except ParseError:
-            return {
-                "error": (
-                    "유튜브 자막 응답 파싱에 실패했습니다. "
-                    "영상 자막 비공개/제한, 일시 네트워크 문제, 또는 유튜브 차단 가능성을 확인해주세요."
-                ),
-                "success": False,
-            }
-        except Exception as e:
-            return {"error": f"유튜브 자막 추출 실패: {e}", "success": False}
+        transcript_items: Optional[list[dict]] = None
+        last_exception: Optional[Exception] = None
+
+        for attempt in range(2):
+            try:
+                transcript_items = await loop.run_in_executor(
+                    None,
+                    lambda: self._fetch_best_youtube_transcript(video_id),
+                )
+                break
+            except ParseError as e:
+                last_exception = e
+                if attempt == 0:
+                    await asyncio.sleep(0.5)
+            except (NoTranscriptFound, TranscriptsDisabled, VideoUnavailable) as e:
+                last_exception = e
+                break
+            except Exception as e:
+                last_exception = e
+                break
+
+        if transcript_items is None:
+            if isinstance(last_exception, NoTranscriptFound):
+                return {
+                    "error": "해당 유튜브 영상에 사용 가능한 자막이 없습니다. 자막이 있는 영상으로 시도해주세요.",
+                    "success": False,
+                }
+            if isinstance(last_exception, TranscriptsDisabled):
+                return {"error": "해당 유튜브 영상은 자막이 비활성화되어 있습니다.", "success": False}
+            if isinstance(last_exception, VideoUnavailable):
+                return {"error": "해당 유튜브 영상을 사용할 수 없습니다.", "success": False}
+            if isinstance(last_exception, ParseError):
+                return {
+                    "error": (
+                        "유튜브 자막 응답 파싱에 실패했습니다. "
+                        "현재 네트워크/환경에서 YouTube 자막 API가 차단되었을 수 있습니다."
+                    ),
+                    "success": False,
+                }
+            return {"error": f"유튜브 자막 추출 실패: {last_exception}", "success": False}
 
         transcript_text = self._clean_youtube_transcript(transcript_items)
         if len(transcript_text) < 40:
@@ -272,26 +288,23 @@ class ScraperService:
     def _is_valid_youtube_video_id(self, video_id: str) -> bool:
         return bool(video_id and re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id))
 
-    def _fetch_best_youtube_transcript(self, video_id: str) -> list[dict]:
+    def _fetch_best_youtube_transcript(self, video_id: str) -> List[Any]:
         """가능한 자막을 우선순위로 시도해 transcript를 가져온다."""
         transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
 
-        # 1) 수동/번역 가능 자막 우선
         try:
             preferred = transcript_list.find_transcript(["ko", "en"])
             return preferred.fetch()
         except Exception:
             pass
 
-        # 2) 자동 생성 자막
         try:
             generated = transcript_list.find_generated_transcript(["ko", "en"])
             return generated.fetch()
         except Exception:
             pass
 
-        # 3) 남아있는 자막을 순차 시도 (일부 영상은 특정 트랙만 성공)
-        last_error: Exception | None = None
+        last_error: Optional[Exception] = None
         for transcript in transcript_list:
             try:
                 return transcript.fetch()
@@ -316,10 +329,20 @@ class ScraperService:
             pass
         return f"YouTube 영상 {video_id}"
 
-    def _clean_youtube_transcript(self, items: list[dict]) -> str:
+    @staticmethod
+    def _transcript_snippet_text(item: Any) -> str:
+        """youtube-transcript-api: 예전 dict 또는 FetchedTranscriptSnippet 등 객체 모두 지원."""
+        if isinstance(item, dict):
+            return str(item.get("text", "")).strip()
+        text = getattr(item, "text", None)
+        if text is not None:
+            return str(text).strip()
+        return ""
+
+    def _clean_youtube_transcript(self, items: List[Any]) -> str:
         texts: list[str] = []
         for item in items:
-            raw = str(item.get("text", "")).strip()
+            raw = self._transcript_snippet_text(item)
             if not raw:
                 continue
             cleaned = re.sub(r"\[[^\]]+\]", " ", raw)

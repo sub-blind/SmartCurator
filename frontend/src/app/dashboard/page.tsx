@@ -18,6 +18,7 @@ const UI_NOISE_PATTERNS: RegExp[] = [
 ];
 const CONTENTS_PAGE_SIZE = 4;
 const TOAST_TTL_MS = 3500;
+const SUMMARY_PREVIEW_MAX_LENGTH = 420;
 
 type DashboardToast = {
   id: number;
@@ -491,7 +492,7 @@ function DashboardPageContent() {
                     onClick={() => setSelectedContent(item)}
                     className="mt-2 block w-full text-left text-xs text-slate-200"
                   >
-                    {truncateText(item.summary, 260)}
+                    {truncateText(item.summary, SUMMARY_PREVIEW_MAX_LENGTH)}
                     <span className="ml-1 text-[11px] text-blue-300">전체 보기</span>
                   </button>
                 )}

@@ -16,7 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ko">
       <body className={`${inter.className} bg-slate-950 text-slate-100`}>
-        <div className="gradient-ring fixed inset-0 -z-10 opacity-60" aria-hidden="true" />
+        <div className="gradient-ring fixed inset-0 -z-10 opacity-40" aria-hidden="true" />
         <AuthProvider>
           <div className="relative min-h-screen">
             <TopNav />
