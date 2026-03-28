@@ -1,51 +1,54 @@
-# 배포 구조 결정 (현재)
+# 배포는 왜 이렇게 했는지
 
-## 요약
+## 한 줄 요약
 
-운영은 **로컬 백엔드 + Cloudflare Tunnel + Vercel 프론트**입니다.
+지금은 **로컬에서 API·워커·DB·검색을 다 돌리고**, 화면만 Vercel에 올렸습니다. 밖에서 API를 부를 때는 **Cloudflare Tunnel**로 집 PC의 `localhost:8000`에 붙게 했어요.
 
-- 한국어 임베딩·비용 균형을 위해 API·Celery·PostgreSQL·Redis·Qdrant는 로컬(또는 로컬 Docker)에서 실행합니다.
-- Vercel은 Next.js UI만 배포합니다.
-- 외부에서 API에 접근하려면 **Cloudflare Tunnel**로 `localhost:8000`을 공개 도메인에 연결합니다.
+## 왜 로컬에 두었나
 
-## 컴포넌트 배치
+- 한국어 임베딩·Qdrant까지 **그대로 두고** 싶었고
+- 월별 클라우드 컴퓨트 비용을 **거의 안 쓰고** 싶었습니다.
 
-| 구성 요소 | 위치 |
-|-----------|------|
-| Frontend | Vercel |
-| Backend API | 로컬 (`uvicorn`, 예: `0.0.0.0:8000`) |
-| Celery Worker | 로컬 |
-| PostgreSQL | 로컬 Docker 등 |
-| Redis | 로컬 Docker 등 |
-| Qdrant | 로컬 Docker 등 |
-| 공개 API URL | Cloudflare Tunnel → 로컬 API |
+그래서 “API를 AWS에 올린다”보다 Tunnel로 노출하는 쪽을 택한 겁니다.
 
-## Cloudflare Tunnel 두 가지 방식
+## 각각 어디 있나
 
-| 방식 | 용도 | 특징 |
-|------|------|------|
-| **Quick Tunnel** | 임시 테스트 | `cloudflared tunnel --url http://localhost:8000` — 세션마다 URL이 바뀔 수 있음 |
-| **Named Tunnel (권장)** | 상시 운영 | Zero Trust → Tunnels → **Published application routes**로 `api.example.com` → `http://localhost:8000` 매핑 후, PC에서 `cloudflared service install <token>`(Windows 서비스)로 상시 연결 |
+| 것 | 위치 |
+|----|------|
+| 프론트(Next.js) | Vercel |
+| FastAPI | 로컬 (`uvicorn`, 보통 `0.0.0.0:8000`) |
+| Celery | 로컬 |
+| PostgreSQL / Redis / Qdrant | 로컬(보통 Docker) |
+| 인터넷에서 보이는 API 주소 | Tunnel → 위 FastAPI |
 
-프로덕션·고정 도메인은 **Named Tunnel + 서비스 설치**를 사용하는 것이 맞습니다.
+## Tunnel 두 가지
 
-## 트레이드오프
+| 방식 | 언제 쓰나 | 특징 |
+|------|-----------|------|
+| **Quick Tunnel** | 잠깐 테스트 | `cloudflared tunnel --url http://localhost:8000` — 세션마다 URL이 바뀔 수 있음 |
+| **Named Tunnel** | 꾸준히 쓸 때 | Zero Trust에서 터널 만들고, `api.도메인` → `http://localhost:8000` 고정. PC에 `cloudflared` 서비스로 올려 두면 전원만 켜지면 됨 |
 
-- **장점:** 클라우드 컴퓨트 비용 절감, 로컬에서 실험·디버깅 용이, 임베딩 품질 유지.
-- **한계:** PC·네트워크·터널이 꺼지면 API가 끊김. Quick Tunnel은 URL이 바뀔 수 있음.
-- **보완:** Named Tunnel·고정 도메인·절전 해제; 필요 시 API/Worker/DB를 클라우드로 이전.
+상시 데모라면 Named Tunnel 쪽이 덜 번거롭습니다.
 
-## 2026-03 기준 반영 사항
+## 솔직한 단점
 
-- Access / Refresh JWT, `POST /auth/refresh`, 프론트 만료 임박 자동 갱신
-- 대시보드 처리 완료·실패 토스트, 내 콘텐츠 최근순 페이지네이션(페이지당 4개)
+- PC를 끄거나 인터넷이 불안하면 API가 같이 갑니다.
+- Quick Tunnel만 쓰면 주소가 바뀔 수 있어서, 프론트 환경 변수도 같이 갱신해야 할 때가 있습니다.
 
-## 배포 절차 (요약)
+반대로 **장점**은 비용·실험·디버깅이 편하다는 것, 그리고 지금 쓰는 임베딩·검색 스택을 클라우드로 옮겨 다시 맞출 부담이 적다는 쪽이에요. 나중에 필요하면 API·워커·DB만 단계적으로 클라우드로 빼도 됩니다.
 
-1. 로컬에서 PostgreSQL·Redis·Qdrant·백엔드·Celery 기동
-2. Cloudflare에서 Named Tunnel 생성 → **Published application routes**에 API 호스트네임·`http://localhost:8000` 등록 → PC에 `cloudflared` 설치 후 토큰으로 서비스 등록(또는 Quick Tunnel로만 테스트)
-3. Vercel 환경 변수 `NEXT_PUBLIC_API_BASE_URL`에 공개 API 베이스 URL(예: `https://api.example.com`) 설정
-4. 백엔드 `ALLOWED_ORIGINS`에 Vercel·프로덕션 도메인 포함(JSON 배열 형식 권장)
-5. 점검: 로그인·콘텐츠 처리·검색·RAG·토큰 자동 갱신
+## 2026-03에 맞춰 둔 것
 
-자세한 시나리오는 [SCENARIO_A_TO_Z.md](./SCENARIO_A_TO_Z.md)를 참고하세요.
+- Access / Refresh JWT, `POST /auth/refresh`, 프론트에서 만료 임박 시 갱신
+- 처리 끝나면/망가지면 대시보드에서 토스트
+- 내 콘텐츠 최근순 + 페이지당 4개
+
+## 올릴 때 순서 (대략)
+
+1. 로컬에서 DB·Redis·Qdrant·백엔드·Celery 띄우기  
+2. Cloudflare에서 Tunnel 만들고, 공개 호스트를 로컬 API에 연결  
+3. Vercel에 `NEXT_PUBLIC_API_BASE_URL`을 그 공개 API 베이스 URL로 설정  
+4. 백엔드 `ALLOWED_ORIGINS`에 Vercel 도메인 넣기  
+5. 로그인 → 콘텐츠 → 검색 → RAG → 토큰 갱신까지 한번씩 눌러 보기  
+
+더 세부 시나리오는 [SCENARIO_A_TO_Z.md](./SCENARIO_A_TO_Z.md)를 보면 됩니다.
