@@ -30,43 +30,18 @@ export function TopNav() {
     }
   };
 
-  const AuthActions = ({ mobile = false }: { mobile?: boolean }) => (
-    <div className="flex items-center gap-2">
-      {initialized && token ? (
-        <>
-          <span className={`${mobile ? "block" : "hidden md:inline"} text-sm text-slate-200`}>
-            {userEmail ?? "로그인됨"}
-          </span>
-          <button
-            type="button"
-            onClick={async () => {
-              await handleLogout();
-              closeMobileMenu();
-            }}
-            className="whitespace-nowrap rounded-full border border-white/15 px-3 py-1 text-xs text-slate-200 transition hover:border-red-400 hover:text-red-200"
-          >
-            로그아웃
-          </button>
-        </>
-      ) : (
-        <>
-          <Link
-            href="/login"
-            onClick={closeMobileMenu}
-            className="whitespace-nowrap rounded-full border border-white/10 px-3 py-1 text-xs text-slate-200 transition hover:border-brand hover:text-white"
-          >
-            로그인
-          </Link>
-          <Link
-            href="/register"
-            onClick={closeMobileMenu}
-            className="whitespace-nowrap rounded-full bg-brand px-4 py-1.5 text-xs font-medium text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-500"
-          >
-            회원가입
-          </Link>
-        </>
-      )}
-    </div>
+  const desktopNav = (
+    <nav className="hidden items-center gap-6 text-base text-slate-200 sm:flex">
+      <Link href="/" className="whitespace-nowrap rounded-full px-2 py-1 transition hover:text-white">
+        소개
+      </Link>
+      <Link href="/dashboard" className="whitespace-nowrap rounded-full px-2 py-1 transition hover:text-white">
+        대시보드
+      </Link>
+      <Link href="/project-notes" className="whitespace-nowrap rounded-full px-2 py-1 transition hover:text-white">
+        프로젝트 노트
+      </Link>
+    </nav>
   );
 
   return (
@@ -86,37 +61,55 @@ export function TopNav() {
       )}
 
       <div className="mx-auto max-w-6xl px-4 py-3 sm:px-10">
-        <div className="flex items-center justify-between gap-3">
+        <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
           <Link href="/" className="shrink-0 whitespace-nowrap text-2xl font-semibold tracking-tight text-white">
             SmartCurator
           </Link>
 
-          <div className="hidden sm:block">
-            <AuthActions />
+          <div className="flex justify-center">{desktopNav}</div>
+
+          <div className="hidden items-center gap-2 sm:flex">
+            {initialized && token ? (
+              <>
+                <span className="hidden text-sm text-slate-200 lg:inline">{userEmail ?? "로그인됨"}</span>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="whitespace-nowrap rounded-full border border-white/15 px-3 py-1 text-xs text-slate-200 transition hover:border-red-400 hover:text-red-200"
+                >
+                  로그아웃
+                </button>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="whitespace-nowrap rounded-full border border-white/10 px-3 py-1 text-xs text-slate-200 transition hover:border-brand hover:text-white"
+                >
+                  로그인
+                </Link>
+                <Link
+                  href="/register"
+                  className="whitespace-nowrap rounded-full bg-brand px-4 py-1.5 text-xs font-medium text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-500"
+                >
+                  회원가입
+                </Link>
+              </>
+            )}
           </div>
 
-          <button
-            type="button"
-            onClick={() => setMobileMenuOpen((prev) => !prev)}
-            className="sm:hidden whitespace-nowrap rounded-full border border-white/15 px-3 py-1 text-xs text-slate-200"
-            aria-expanded={mobileMenuOpen}
-            aria-label="모바일 메뉴 열기"
-          >
-            메뉴
-          </button>
+          <div className="flex justify-end sm:hidden">
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen((prev) => !prev)}
+              className="whitespace-nowrap rounded-full border border-white/15 px-3 py-1 text-xs text-slate-200"
+              aria-expanded={mobileMenuOpen}
+              aria-label="모바일 메뉴 열기"
+            >
+              메뉴
+            </button>
+          </div>
         </div>
-
-        <nav className="mt-3 hidden items-center gap-2 overflow-x-auto pb-1 text-sm text-slate-200 sm:flex sm:mt-2 sm:justify-center sm:gap-6 sm:text-base">
-          <Link href="/" className="whitespace-nowrap rounded-full px-3 py-1.5 transition hover:bg-white/5 hover:text-white">
-            소개
-          </Link>
-          <Link href="/dashboard" className="whitespace-nowrap rounded-full px-3 py-1.5 transition hover:bg-white/5 hover:text-white">
-            대시보드
-          </Link>
-          <Link href="/project-notes" className="whitespace-nowrap rounded-full px-3 py-1.5 transition hover:bg-white/5 hover:text-white">
-            프로젝트 노트
-          </Link>
-        </nav>
 
         {mobileMenuOpen && (
           <div className="mt-3 rounded-2xl border border-white/10 bg-slate-900/90 p-3 sm:hidden">
@@ -142,8 +135,40 @@ export function TopNav() {
               >
                 프로젝트 노트
               </Link>
+
               <div className="mt-1 border-t border-white/10 pt-2">
-                <AuthActions mobile />
+                {initialized && token ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-xs text-slate-300">{userEmail ?? "로그인됨"}</span>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await handleLogout();
+                        closeMobileMenu();
+                      }}
+                      className="whitespace-nowrap rounded-full border border-white/15 px-3 py-1 text-xs text-slate-200"
+                    >
+                      로그아웃
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href="/login"
+                      onClick={closeMobileMenu}
+                      className="whitespace-nowrap rounded-full border border-white/10 px-3 py-1 text-xs text-slate-200"
+                    >
+                      로그인
+                    </Link>
+                    <Link
+                      href="/register"
+                      onClick={closeMobileMenu}
+                      className="whitespace-nowrap rounded-full bg-brand px-4 py-1.5 text-xs font-medium text-white"
+                    >
+                      회원가입
+                    </Link>
+                  </div>
+                )}
               </div>
             </div>
           </div>
