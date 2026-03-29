@@ -41,6 +41,11 @@ function truncateText(text: string, maxLength: number) {
 
 function cleanSnippet(text: string) {
   let cleaned = (text || "").replace(/\s+/g, " ").trim();
+  cleaned = cleaned.replace(/!\[[^\]]*\]\([^)]+\)/g, " ");
+  cleaned = cleaned.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, "$1");
+  cleaned = cleaned.replace(/https?:\/\/\S+/g, " ");
+  cleaned = cleaned.replace(/\([^)]*instagram[^)]*\)/gi, " ");
+  cleaned = cleaned.replace(/[*_`>#-]+/g, " ");
   for (const pattern of UI_NOISE_PATTERNS) {
     cleaned = cleaned.replace(pattern, " ");
   }
@@ -392,7 +397,6 @@ function DashboardPageContent() {
               <p className="text-sm text-slate-200">
                 저장한 기사와 노트의 처리 상태, 요약, 태그를 확인합니다.
               </p>
-              <p className="mt-1 text-xs text-slate-300">최근 업데이트 순 · 페이지당 4개</p>
               {activeTagFilter && (
                 <div className="mt-2 flex items-center gap-2">
                   <span className="rounded-full border border-blue-300/40 bg-blue-500/20 px-2 py-0.5 text-[11px] text-blue-100">
@@ -508,8 +512,8 @@ function DashboardPageContent() {
                     ))}
                   </div>
                 )}
-                <div className="mt-3 flex items-end justify-between gap-3">
-                  <div className="flex gap-2">
+                <div className="mt-3 flex flex-col items-start gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={async () => {
@@ -520,7 +524,7 @@ function DashboardPageContent() {
                           setMessage(err instanceof Error ? err.message : "재처리 요청에 실패했습니다.");
                         }
                       }}
-                      className="rounded-full border border-white/15 px-3 py-1 text-[11px] text-slate-100 hover:border-blue-400"
+                      className="whitespace-nowrap rounded-full border border-white/15 px-3 py-1.5 text-[11px] text-slate-100 hover:border-blue-400"
                     >
                       재처리
                     </button>
@@ -536,12 +540,12 @@ function DashboardPageContent() {
                           setMessage(err instanceof Error ? err.message : "삭제에 실패했습니다.");
                         }
                       }}
-                      className="rounded-full border border-red-500/40 px-3 py-1 text-[11px] text-red-200 hover:bg-red-500/10"
+                      className="whitespace-nowrap rounded-full border border-red-500/40 px-3 py-1.5 text-[11px] text-red-200 hover:bg-red-500/10"
                     >
                       삭제
                     </button>
                   </div>
-                  <p className="shrink-0 text-[11px] text-slate-400">
+                  <p className="shrink-0 text-[11px] text-slate-400 sm:text-right">
                     {item.status === "completed" ? "처리 완료" : "최근 업데이트"}{" "}
                     {formatKoreanDateTime(item.updated_at || item.created_at)}
                   </p>
@@ -632,9 +636,9 @@ function DashboardPageContent() {
           </div>
           <div className="flex flex-wrap gap-2">
             {[
-              { id: "strict", label: "정확", hint: "잡음 최소" },
-              { id: "balanced", label: "균형", hint: "기본" },
-              { id: "broad", label: "넓게", hint: "확장" },
+              { id: "strict", label: "딱 맞는 결과", hint: "정확도 우선" },
+              { id: "balanced", label: "적당히 넓게", hint: "기본 추천" },
+              { id: "broad", label: "관련 내용까지", hint: "탐색 범위 확장" },
             ].map((mode) => {
               const selected = searchMode === mode.id;
               return (
@@ -643,7 +647,7 @@ function DashboardPageContent() {
                   type="button"
                   onClick={() => setSearchMode(mode.id as "strict" | "balanced" | "broad")}
                   title={mode.hint}
-                  className={`rounded-full px-3 py-1 text-xs transition ${
+                  className={`whitespace-nowrap rounded-full px-3 py-1 text-xs transition ${
                     selected
                       ? "border border-blue-400 bg-blue-500/20 text-blue-100"
                       : "border border-white/15 text-slate-300 hover:border-white/30"
@@ -665,7 +669,7 @@ function DashboardPageContent() {
               type="button"
               onClick={handleSemanticSearch}
               disabled={searchLoading}
-              className="rounded-xl bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+              className="whitespace-nowrap rounded-xl bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
             >
               {searchLoading ? "검색 중.." : "검색"}
             </button>
