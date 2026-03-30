@@ -124,6 +124,16 @@ export const api = {
       method: "POST",
       token
     }),
+  updateContent: (
+    id: number,
+    payload: { title?: string; is_public?: boolean },
+    token: string,
+  ) =>
+    smartFetch<ContentItem>(`/contents/${id}`, {
+      method: "PUT",
+      token,
+      body: payload,
+    }),
   semanticSearch: (
     query: string,
     token: string,

@@ -49,7 +49,9 @@ export function TopNav() {
       {initialized && token && isExpiringSoon && (
         <div className="border-b border-amber-300/30 bg-amber-400/10">
           <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2 text-xs text-amber-100 sm:px-10">
-            <p>세션이 약 {remainMinutes}분 후 만료됩니다. 작업을 계속하려면 다시 로그인해 주세요.</p>
+            <p>
+              세션이 약 {remainMinutes}분 후 만료됩니다. 작업을 계속하려면 다시 로그인해 주세요.
+            </p>
             <Link
               href={`/login?reauth=1&next=${encodeURIComponent(pathname || "/dashboard")}`}
               className="shrink-0 whitespace-nowrap rounded-full border border-amber-200/40 px-3 py-1 text-[11px] font-medium hover:bg-amber-300/10"

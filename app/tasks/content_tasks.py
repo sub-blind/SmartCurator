@@ -14,6 +14,7 @@ from app.utils.text_chunking import split_into_chunks
 logger = logging.getLogger(__name__)
 MAX_SUMMARY_CHUNKS = 8
 MIN_SCRAPED_CONTENT_CHARS = 120
+AUTO_TITLE_MARKERS = {"", "제목 없음", "자동 생성 제목", "웹페이지"}
 SCRAPE_FAILURE_MARKERS = (
     "내용을 추출할 수 없습니다",
     "unable to extract content",
@@ -46,6 +47,55 @@ def _is_valid_scraped_content(text: str) -> bool:
     if len(normalized) < MIN_SCRAPED_CONTENT_CHARS:
         return False
     return True
+
+
+def _needs_auto_title(title: str | None) -> bool:
+    normalized = (title or "").strip()
+    return normalized in AUTO_TITLE_MARKERS
+
+
+def _clean_generated_title(title: str, fallback: str) -> str:
+    normalized = " ".join((title or "").split()).strip().strip("\"'“”‘’")
+    if len(normalized) >= 4:
+        return normalized[:60].strip()
+    fallback_normalized = " ".join((fallback or "").split()).strip()
+    if fallback_normalized:
+        return fallback_normalized[:60].strip()
+    return "요약 콘텐츠"
+
+
+def _generate_title_with_ai(ai_service: AIService, raw_content: str, url: str, fallback: str) -> str:
+    prompt = f"""
+다음 본문을 바탕으로 한국어 제목 1개를 만들어 주세요.
+조건:
+- 18~36자 권장
+- 핵심 주제가 바로 드러나게 작성
+- 자극적인 표현 금지
+
+URL: {url}
+본문:
+{(raw_content or '')[:2200]}
+
+아래 JSON만 반환:
+{{
+  "title": "생성된 제목"
+}}
+"""
+    try:
+        response = asyncio.run(
+            ai_service._chat_json(  # noqa: SLF001 - 내부 유틸 재사용
+                system_message=(
+                    "당신은 뉴스/문서 제목을 간결하게 정리하는 편집자다. "
+                    "본문 핵심을 한 줄 제목으로 만든다."
+                ),
+                user_message=prompt,
+                max_tokens=140,
+                temperature=0.2,
+            )
+        )
+        return _clean_generated_title(str(response.get("title", "")), fallback)
+    except Exception:
+        return _clean_generated_title("", fallback)
 
 
 @celery_app.task(bind=True, max_retries=2, default_retry_delay=30)
@@ -115,8 +165,14 @@ def _process_content_sync(content_id: int):
                     return {"content_id": content_id, "status": "failed", "error": error_msg}
 
                 content.raw_content = scraped_content
-                if not content.title or content.title == "웹페이지":
-                    content.title = scraped.get("title", content.title)
+                scraped_title = (scraped.get("title") or "").strip()
+                if _needs_auto_title(content.title):
+                    content.title = _generate_title_with_ai(
+                        ai_service=ai_service,
+                        raw_content=scraped_content,
+                        url=content.url or "",
+                        fallback=scraped_title,
+                    )
                 logger.info("✅ 크롤링 완료: %s chars", len(content.raw_content or ""))
             else:
                 error_msg = scraped.get("error", "스크래핑 실패")

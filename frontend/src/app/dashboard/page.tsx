@@ -129,6 +129,8 @@ function DashboardPageContent() {
   const [chatMessage, setChatMessage] = useState<string | null>(null);
   const [chatAnswer, setChatAnswer] = useState<ChatAnswer | null>(null);
   const [selectedContent, setSelectedContent] = useState<ContentItem | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
+  const [savingTitle, setSavingTitle] = useState(false);
   const [expandedSearchResults, setExpandedSearchResults] = useState<Set<number>>(new Set());
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
   const [showQuickGuide, setShowQuickGuide] = useState(false);
@@ -295,6 +297,10 @@ function DashboardPageContent() {
     }
   }, [currentContentsPage, totalContentsPages]);
 
+  useEffect(() => {
+    setEditingTitle(selectedContent?.title ?? "");
+  }, [selectedContent]);
+
   const handleSemanticSearch = async () => {
     if (!token || !searchQuery.trim()) return;
     setSearchLoading(true);
@@ -331,6 +337,28 @@ function DashboardPageContent() {
       setChatMessage(err instanceof Error ? err.message : "답변 생성에 실패했습니다.");
     } finally {
       setChatLoading(false);
+    }
+  };
+
+  const handleSaveTitle = async () => {
+    if (!token || !selectedContent) return;
+    const nextTitle = editingTitle.trim();
+    if (!nextTitle) {
+      setMessage("제목은 비워둘 수 없습니다.");
+      return;
+    }
+    if (nextTitle === selectedContent.title) return;
+
+    setSavingTitle(true);
+    try {
+      const updated = await api.updateContent(selectedContent.id, { title: nextTitle }, token);
+      setContents((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      setSelectedContent(updated);
+      pushToast("success", "제목이 수정되었습니다.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "제목 수정에 실패했습니다.");
+    } finally {
+      setSavingTitle(false);
     }
   };
 
@@ -811,8 +839,23 @@ function DashboardPageContent() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-semibold text-white">{selectedContent.title}</h3>
+              <div className="w-full">
+                <label className="block text-xs text-slate-300">제목</label>
+                <div className="mt-1 flex gap-2">
+                  <input
+                    value={editingTitle}
+                    onChange={(e) => setEditingTitle(e.target.value)}
+                    className="w-full rounded-lg border border-white/15 bg-slate-900/70 px-3 py-2 text-sm text-white focus:border-brand focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveTitle()}
+                    disabled={savingTitle}
+                    className="whitespace-nowrap rounded-lg border border-blue-300/35 bg-blue-500/20 px-3 py-2 text-xs text-blue-100 disabled:opacity-50"
+                  >
+                    {savingTitle ? "저장 중..." : "저장"}
+                  </button>
+                </div>
                 <p className="mt-1 text-xs text-slate-400">
                   생성 {new Date(selectedContent.created_at).toLocaleString()}
                 </p>

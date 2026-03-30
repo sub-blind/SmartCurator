@@ -42,34 +42,42 @@ export function QuickAddForm({
       setMessage("먼저 위에서 JWT 토큰을 발급받아 주세요.");
       return;
     }
+
     setLoading(true);
     setMessage(null);
+
     try {
-      const effectiveTitle = form.title.trim() || file?.name || "제목 없음";
+      const manualTitle = form.title.trim();
+      const effectiveTitle =
+        manualTitle ||
+        (file
+          ? file.name
+          : form.type === "url"
+            ? "자동 생성 제목"
+            : "제목 없음");
+
       if (file) {
         await api.uploadContentFile({
           file,
           title: effectiveTitle,
           is_public: form.isPublic,
-          token
+          token,
         });
       } else {
-        const payload = {
+        await api.quickAddContent({
           title: effectiveTitle,
           url: form.url || undefined,
           raw_content: form.content || undefined,
           content_type: form.type,
           is_public: form.isPublic,
-          token
-        };
-        await api.quickAddContent(payload);
+          token,
+        });
       }
-      setMessage("콘텐츠가 백엔드 큐에 등록되었습니다.");
+
+      setMessage("콘텐츠가 백엔드 큐에 등록되었습니다. 처리가 끝나면 요약·태그가 붙습니다.");
       setForm(defaultState);
       setFile(null);
-      if (onCreated) {
-        onCreated();
-      }
+      onCreated?.();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "등록 실패");
     } finally {
@@ -83,14 +91,17 @@ export function QuickAddForm({
         <p className="text-sm font-medium text-white">콘텐츠 추가</p>
         <p className="text-xs text-slate-400">URL, 텍스트, PDF 파일 업로드 지원</p>
       </div>
+
       <label className="text-xs text-slate-300">
-        제목
+        제목 (선택)
         <input
           value={form.title}
           onChange={(e) => handleChange("title", e.target.value)}
+          placeholder="비워 두면 URL은 자동 제목, 텍스트는 제목 없음으로 보냅니다."
           className="mt-1 w-full rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-white focus:border-brand focus:outline-none"
         />
       </label>
+
       <label className="text-xs text-slate-300">
         URL (선택)
         <input
@@ -100,6 +111,7 @@ export function QuickAddForm({
           className="mt-1 w-full rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-white focus:border-brand focus:outline-none"
         />
       </label>
+
       <label className="text-xs text-slate-300">
         메모 / 본문 (선택)
         <textarea
@@ -109,6 +121,7 @@ export function QuickAddForm({
           className="mt-1 w-full rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-white focus:border-brand focus:outline-none"
         />
       </label>
+
       <label className="text-xs text-slate-300">
         파일 첨부 (선택: PDF/TXT/MD)
         <input
@@ -121,6 +134,7 @@ export function QuickAddForm({
           파일을 선택하면 URL/본문 대신 파일 내용으로 등록됩니다.
         </p>
       </label>
+
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-xs text-slate-300">
           타입
@@ -134,6 +148,7 @@ export function QuickAddForm({
             <option value="text">텍스트</option>
           </select>
         </label>
+
         <label className="flex items-center gap-2 text-xs text-slate-300">
           <input
             type="checkbox"
@@ -144,6 +159,7 @@ export function QuickAddForm({
           공개 콘텐츠로 저장
         </label>
       </div>
+
       <button
         type="submit"
         disabled={loading}
@@ -151,10 +167,8 @@ export function QuickAddForm({
       >
         {loading ? "등록 중..." : "추가하기"}
       </button>
+
       {message && <p className="text-xs text-emerald-300">{message}</p>}
     </form>
   );
 }
-
-
-
