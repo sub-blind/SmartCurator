@@ -1,28 +1,30 @@
-from pydantic import BaseModel, HttpUrl
-from typing import Optional, List
 from datetime import datetime
+from typing import List, Optional
+
+from pydantic import BaseModel, HttpUrl
+
 
 class ContentCreate(BaseModel):
-    """컨텐츠 생성 스키마"""
     title: str
-    url: Optional[HttpUrl] = None                # URL 형식 검증
-    raw_content: Optional[str] = None            # 직접 입력 텍스트
-    content_type: str = "url"                    # url, text, pdf
+    url: Optional[HttpUrl] = None
+    raw_content: Optional[str] = None
+    content_type: str = "url"
     is_public: bool = False
 
+
 class ContentUpdate(BaseModel):
-    """컨텐츠 수정 스키마"""
     title: Optional[str] = None
     is_public: Optional[bool] = None
 
+
 class ContentRead(BaseModel):
-    """컨텐츠 응답 스키마"""
     id: int
     title: str
     url: Optional[str] = None
     content_type: str
     summary: Optional[str] = None
     tags: Optional[List[str]] = None
+    processing_error: Optional[str] = None
     status: str
     is_public: bool
     created_at: datetime

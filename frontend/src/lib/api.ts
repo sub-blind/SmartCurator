@@ -48,7 +48,21 @@ async function smartFetch<T>(endpoint: string, options: FetchOptions = {}): Prom
     if (response.status >= 502 && response.status <= 504) {
       throw new Error("백엔드에 연결할 수 없습니다. API 서버와 Cloudflare Tunnel 상태를 확인해 주세요.");
     }
-    throw new Error(errorBody.detail ?? "요청에 실패했습니다.");
+    const detail = errorBody?.detail;
+    if (typeof detail === "string" && detail.trim()) {
+      throw new Error(detail);
+    }
+    if (detail && typeof detail === "object") {
+      const message = (detail as { message?: string }).message;
+      const contentId = (detail as { content_id?: number }).content_id;
+      if (message && contentId) {
+        throw new Error(`${message} (콘텐츠 #${contentId})`);
+      }
+      if (message) {
+        throw new Error(message);
+      }
+    }
+    throw new Error("요청에 실패했습니다.");
   }
 
   return (await response.json()) as T;

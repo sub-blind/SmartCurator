@@ -10,6 +10,7 @@ export type ContentItem = {
   content_type: string;
   summary?: string | null;
   tags?: string[] | null;
+  processing_error?: string | null;
   status: ContentStatus;
   is_public: boolean;
   created_at: string;

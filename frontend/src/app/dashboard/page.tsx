@@ -528,6 +528,11 @@ function DashboardPageContent() {
                     <span className="ml-1 text-[11px] text-blue-300">전체 보기</span>
                   </button>
                 )}
+                {item.status === "failed" && item.processing_error && (
+                  <p className="mt-2 rounded-lg border border-red-300/20 bg-red-500/10 px-2.5 py-2 text-[11px] text-red-200">
+                    실패 원인: {truncateText(item.processing_error, 180)}
+                  </p>
+                )}
                 {item.tags && item.tags.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {item.tags.map((tag) => (
@@ -554,7 +559,7 @@ function DashboardPageContent() {
                       }}
                       className="whitespace-nowrap rounded-full border border-white/15 px-3 py-1.5 text-[11px] text-slate-100 hover:border-blue-400"
                     >
-                      재처리
+                      {item.status === "failed" ? "다시 시도" : "재처리"}
                     </button>
                     <button
                       type="button"
@@ -863,7 +868,7 @@ function DashboardPageContent() {
               <button
                 type="button"
                 onClick={() => setSelectedContent(null)}
-                className="rounded-full border border-white/15 px-3 py-1 text-xs text-slate-200 hover:border-brand"
+                className="whitespace-nowrap rounded-full border border-white/15 px-3 py-1 text-xs text-slate-200 hover:border-brand"
               >
                 닫기
               </button>
@@ -890,6 +895,13 @@ function DashboardPageContent() {
                 {selectedContent.summary || "요약이 아직 생성되지 않았습니다."}
               </p>
             </div>
+
+            {selectedContent.status === "failed" && selectedContent.processing_error && (
+              <div className="mt-3 rounded-xl border border-red-300/20 bg-red-500/10 p-3">
+                <p className="text-xs font-semibold text-red-200">실패 원인</p>
+                <p className="mt-1 text-xs text-red-100">{selectedContent.processing_error}</p>
+              </div>
+            )}
 
             {selectedContent.tags && selectedContent.tags.length > 0 && (
               <div className="mt-4">

@@ -123,6 +123,7 @@ def process_content_task(self, content_id: int):
             content = session.get(Content, content_id)
             if content:
                 content.status = "failed"
+                content.processing_error = str(exc)[:1000]
                 session.commit()
         except Exception as e:  # pragma: no cover
             logger.warning("실패 상태 업데이트 실패: %s", e)
@@ -149,6 +150,7 @@ def _process_content_sync(content_id: int):
             return {"content_id": content_id, "status": "not_found"}
 
         content.status = "processing"
+        content.processing_error = None
         session.commit()
 
         # 1) URL 스크래핑
@@ -161,6 +163,7 @@ def _process_content_sync(content_id: int):
                     error_msg = "URL 본문 추출 실패: 접근 제한 또는 본문이 충분하지 않습니다."
                     logger.error("❌ 크롤링 실패: %s", error_msg)
                     content.status = "failed"
+                    content.processing_error = error_msg
                     session.commit()
                     return {"content_id": content_id, "status": "failed", "error": error_msg}
 
@@ -178,6 +181,7 @@ def _process_content_sync(content_id: int):
                 error_msg = scraped.get("error", "스크래핑 실패")
                 logger.error("❌ 크롤링 실패: %s", error_msg)
                 content.status = "failed"
+                content.processing_error = error_msg
                 session.commit()
                 return {"content_id": content_id, "status": "failed", "error": error_msg}
 
@@ -200,6 +204,7 @@ def _process_content_sync(content_id: int):
                     error_msg = chunk_res.get("error", "chunk 요약 실패")
                     logger.error("❌ chunk 요약 실패: %s", error_msg)
                     content.status = "failed"
+                    content.processing_error = error_msg
                     session.commit()
                     return {"content_id": content_id, "status": "failed", "error": error_msg}
                 chunk_summaries.append(chunk_res.get("summary", ""))
@@ -225,6 +230,7 @@ def _process_content_sync(content_id: int):
                 content.summary = ai_res.get("summary")
                 content.tags = ai_res.get("tags", [])
                 content.status = "completed"
+                content.processing_error = None
                 logger.info(
                     "✅ AI 요약 완료: %s chars, %s tags",
                     len(content.summary or ""),
@@ -234,6 +240,7 @@ def _process_content_sync(content_id: int):
                 error_msg = ai_res.get("error", "AI 요약 실패")
                 logger.error("❌ AI 요약 실패: %s", error_msg)
                 content.status = "failed"
+                content.processing_error = error_msg
                 session.commit()
                 return {"content_id": content_id, "status": "failed", "error": error_msg}
 
@@ -268,6 +275,7 @@ def _process_content_sync(content_id: int):
             content = session.get(Content, content_id)
             if content:
                 content.status = "failed"
+                content.processing_error = str(e)[:1000]
                 session.commit()
         except Exception:
             logger.warning("실패 상태 업데이트 중 예외 발생", exc_info=True)

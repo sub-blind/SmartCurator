@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+
 import { api } from "@/lib/api";
 import type { ContentType } from "@/types/content";
 
@@ -39,7 +40,7 @@ export function QuickAddForm({
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!token) {
-      setMessage("먼저 위에서 JWT 토큰을 발급받아 주세요.");
+      setMessage("먼저 로그인해 주세요.");
       return;
     }
 
@@ -74,12 +75,12 @@ export function QuickAddForm({
         });
       }
 
-      setMessage("콘텐츠가 백엔드 큐에 등록되었습니다. 처리가 끝나면 요약·태그가 붙습니다.");
+      setMessage("콘텐츠를 등록했습니다. 처리 완료 후 요약/태그가 채워집니다.");
       setForm(defaultState);
       setFile(null);
       onCreated?.();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "등록 실패");
+      setMessage(error instanceof Error ? error.message : "등록에 실패했습니다.");
     } finally {
       setLoading(false);
     }
@@ -97,7 +98,7 @@ export function QuickAddForm({
         <input
           value={form.title}
           onChange={(e) => handleChange("title", e.target.value)}
-          placeholder="비워 두면 URL은 자동 제목, 텍스트는 제목 없음으로 보냅니다."
+          placeholder="비우면 자동 제목"
           className="mt-1 w-full rounded-xl border border-white/10 bg-slate-900/70 px-3 py-2 text-sm text-white focus:border-brand focus:outline-none"
         />
       </label>
@@ -130,9 +131,7 @@ export function QuickAddForm({
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           className="mt-1 block w-full text-xs text-slate-200 file:mr-3 file:rounded-lg file:border file:border-white/20 file:bg-slate-800 file:px-3 file:py-1.5 file:text-xs file:text-slate-100 hover:file:border-brand"
         />
-        <p className="mt-1 text-[11px] text-slate-400">
-          파일을 선택하면 URL/본문 대신 파일 내용으로 등록됩니다.
-        </p>
+        <p className="mt-1 text-[11px] text-slate-400">파일을 선택하면 URL/본문 대신 파일 내용으로 등록됩니다.</p>
       </label>
 
       <div className="grid gap-3 sm:grid-cols-2">
