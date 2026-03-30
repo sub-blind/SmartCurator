@@ -1,15 +1,16 @@
-﻿import asyncio
+import asyncio
 import logging
 import math
+import re
+from urllib.parse import urlparse
 
 from app.core.celery_app import celery_app
 from app.core.database_sync import SessionLocal
 from app.models.content import Content
-from app.services.scraper_service import ScraperService
 from app.services.ai_service import AIService
+from app.services.scraper_service import ScraperService
 from app.services.vector_service import vector_service
 from app.utils.text_chunking import split_into_chunks
-
 
 logger = logging.getLogger(__name__)
 MAX_SUMMARY_CHUNKS = 8
@@ -55,7 +56,7 @@ def _needs_auto_title(title: str | None) -> bool:
 
 
 def _clean_generated_title(title: str, fallback: str) -> str:
-    normalized = " ".join((title or "").split()).strip().strip("\"'“”‘’")
+    normalized = " ".join((title or "").split()).strip().strip('"\'')
     if len(normalized) >= 4:
         return normalized[:60].strip()
     fallback_normalized = " ".join((fallback or "").split()).strip()
@@ -98,17 +99,29 @@ URL: {url}
         return _clean_generated_title("", fallback)
 
 
+def _is_youtube_url(url: str | None) -> bool:
+    if not url:
+        return False
+    try:
+        host = (urlparse(url).netloc or "").lower()
+        return "youtube.com" in host or "youtu.be" in host
+    except Exception:
+        return False
+
+
+def _sentence_count(text: str) -> int:
+    parts = [p.strip() for p in re.split(r"[.!?]\s+|[.!?]$", (text or "").strip()) if p.strip()]
+    return len(parts)
+
+
 @celery_app.task(bind=True, max_retries=2, default_retry_delay=30)
 def process_content_task(self, content_id: int):
     """콘텐츠 처리 태스크."""
     try:
         logger.info("🚀 Celery 태스크 시작: content_id=%s", content_id)
-
         result = _process_content_sync(content_id)
-
         logger.info("✅ Celery 태스크 완료: content_id=%s", content_id)
         return result
-
     except Exception as exc:
         logger.error("❌ 태스크 실패: content_id=%s, error=%s", content_id, exc)
 
@@ -153,7 +166,6 @@ def _process_content_sync(content_id: int):
         content.processing_error = None
         session.commit()
 
-        # 1) URL 스크래핑
         if content.content_type == "url" and content.url:
             logger.info("🕷️ 크롤링 시작: %s", content.url)
             scraped = asyncio.run(scraper.extract_content(content.url))
@@ -185,7 +197,6 @@ def _process_content_sync(content_id: int):
                 session.commit()
                 return {"content_id": content_id, "status": "failed", "error": error_msg}
 
-        # 2) AI 요약
         if content.raw_content:
             logger.info("🤖 AI 요약 시작: content_id=%s", content_id)
             chunks = split_into_chunks(content.raw_content, chunk_size=1100, overlap=180)
@@ -229,6 +240,23 @@ def _process_content_sync(content_id: int):
             if ai_res.get("success"):
                 content.summary = ai_res.get("summary")
                 content.tags = ai_res.get("tags", [])
+
+                if _is_youtube_url(content.url):
+                    summary_text = content.summary or ""
+                    is_too_short = len(summary_text) < 240 or _sentence_count(summary_text) < 4
+                    if is_too_short:
+                        expanded_res = asyncio.run(
+                            ai_service.expand_youtube_summary(
+                                content=content.raw_content or "",
+                                current_summary=summary_text,
+                                title=content.title or "",
+                                url=content.url or "",
+                            )
+                        )
+                        if expanded_res.get("success"):
+                            content.summary = expanded_res.get("summary", content.summary)
+                            content.tags = expanded_res.get("tags", content.tags or [])
+
                 content.status = "completed"
                 content.processing_error = None
                 logger.info(
@@ -246,7 +274,6 @@ def _process_content_sync(content_id: int):
 
         session.commit()
 
-        # 3) 벡터 저장
         if content.status == "completed" and content.summary:
             logger.info("🧠 벡터 저장 시작: content_id=%s", content_id)
             asyncio.run(

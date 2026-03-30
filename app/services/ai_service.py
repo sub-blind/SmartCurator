@@ -75,6 +75,61 @@ class AIService:
             logger.error(f"AI 요약 실패: {e}")
             return {"error": f"AI 요약 실패: {str(e)}", "success": False}
 
+    async def expand_youtube_summary(
+        self,
+        content: str,
+        current_summary: str,
+        title: str = "",
+        url: str = "",
+    ) -> Dict[str, Any]:
+        """유튜브 자막 요약이 너무 짧을 때 길이/구조를 보강한다."""
+        prompt = f"""
+다음은 유튜브 자막 기반 문서입니다.
+현재 요약이 너무 짧아, 내용을 더 풍부하게 다시 작성해 주세요.
+
+제목: {title}
+URL: {url}
+현재 요약:
+{current_summary}
+
+자막 원문(일부):
+{(content or "")[:5000]}
+
+작성 규칙:
+- 한국어 5~7문장
+- 핵심 사건, 배경, 영향, 후속 포인트를 포함
+- 과장/추측 없이 사실 중심
+
+JSON만 반환:
+{{
+  "summary": "확장된 요약",
+  "key_points": ["핵심1", "핵심2", "핵심3", "핵심4", "핵심5"],
+  "tags": ["태그1", "태그2", "태그3", "태그4", "태그5"],
+  "insight": "한 줄 인사이트"
+}}
+"""
+        try:
+            response = await self._chat_json(
+                system_message=(
+                    "당신은 뉴스 요약 편집자다. 유튜브 자막 기반 텍스트를 "
+                    "간결하지만 충분한 맥락이 있는 요약으로 재작성한다."
+                ),
+                user_message=prompt,
+                max_tokens=950,
+                temperature=0.2,
+            )
+            normalized = self._normalize_summary_payload(response, "요약을 생성할 수 없습니다.")
+            return {
+                "summary": normalized["summary"],
+                "tags": normalized["tags"],
+                "key_points": normalized["key_points"],
+                "insight": normalized["insight"],
+                "success": True,
+            }
+        except Exception as e:
+            logger.warning("유튜브 요약 확장 실패: %s", e)
+            return {"success": False, "error": str(e)}
+
     async def synthesize_chunk_summaries(
         self,
         title: str,
