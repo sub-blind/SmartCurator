@@ -843,8 +843,7 @@ function DashboardPageContent() {
             className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/10 bg-slate-950 p-5 shadow-card"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-4">
-              <div className="w-full">
+            <div className="w-full">
                 <label className="block text-xs text-slate-300">제목</label>
                 <div className="mt-1 flex gap-2">
                   <input
@@ -860,18 +859,17 @@ function DashboardPageContent() {
                   >
                     {savingTitle ? "저장 중..." : "저장"}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedContent(null)}
+                    className="whitespace-nowrap rounded-lg border border-white/15 px-3 py-2 text-xs text-slate-200 hover:border-brand"
+                  >
+                    닫기
+                  </button>
                 </div>
                 <p className="mt-1 text-xs text-slate-400">
                   생성 {new Date(selectedContent.created_at).toLocaleString()}
                 </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedContent(null)}
-                className="whitespace-nowrap rounded-full border border-white/15 px-3 py-1 text-xs text-slate-200 hover:border-brand"
-              >
-                닫기
-              </button>
             </div>
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
