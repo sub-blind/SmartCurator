@@ -45,6 +45,17 @@ body {
   @apply min-h-screen antialiased;
 }
 
+select,
+option,
+optgroup {
+  background-color: var(--surface-elevated);
+  color: var(--text-primary);
+}
+
+select {
+  color-scheme: light dark;
+}
+
 .app-body {
   background:
     radial-gradient(circle at top left, rgba(37, 99, 235, 0.12), transparent 30%),
