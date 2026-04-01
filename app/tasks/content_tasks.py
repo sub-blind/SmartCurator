@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import logging
 import math
 import re
@@ -52,7 +52,9 @@ def _is_valid_scraped_content(text: str) -> bool:
 
 def _needs_auto_title(title: str | None) -> bool:
     normalized = (title or "").strip()
-    return normalized in AUTO_TITLE_MARKERS
+    if normalized in AUTO_TITLE_MARKERS:
+        return True
+    return normalized.startswith("웹페이지 - ") or normalized.startswith("유튜브 링크 - ")
 
 
 def _clean_generated_title(title: str, fallback: str) -> str:
@@ -181,6 +183,9 @@ def _process_content_sync(content_id: int):
 
                 content.raw_content = scraped_content
                 scraped_title = (scraped.get("title") or "").strip()
+                scraped_thumbnail_url = (scraped.get("thumbnail_url") or "").strip()
+                if scraped_thumbnail_url:
+                    content.thumbnail_url = scraped_thumbnail_url
                 if _needs_auto_title(content.title):
                     content.title = _generate_title_with_ai(
                         ai_service=ai_service,
@@ -243,7 +248,7 @@ def _process_content_sync(content_id: int):
 
                 if _is_youtube_url(content.url):
                     summary_text = content.summary or ""
-                    is_too_short = len(summary_text) < 240 or _sentence_count(summary_text) < 4
+                    is_too_short = len(summary_text) < 320 or _sentence_count(summary_text) < 5
                     if is_too_short:
                         expanded_res = asyncio.run(
                             ai_service.expand_youtube_summary(
@@ -320,3 +325,4 @@ def health_check():
         "status": "healthy",
         "timestamp": datetime.datetime.now().isoformat(),
     }
+

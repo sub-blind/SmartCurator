@@ -19,7 +19,7 @@ const UI_NOISE_PATTERNS: RegExp[] = [
 ];
 const CONTENTS_PAGE_SIZE = 4;
 const TOAST_TTL_MS = 3500;
-const SUMMARY_PREVIEW_MAX_LENGTH = 420;
+const SUMMARY_PREVIEW_MAX_LENGTH = 560;
 
 type DashboardToast = {
   id: number;
@@ -33,6 +33,7 @@ type TagStat = {
 };
 
 type ContentSortOrder = "desc" | "asc";
+type SourceKind = "youtube" | "website" | "pdf" | "note";
 
 function truncateText(text: string, maxLength: number) {
   const normalized = (text || "").replace(/\s+/g, " ").trim();
@@ -119,6 +120,8 @@ function DashboardPageContent() {
   const searchParams = useSearchParams();
   const { token, initialized } = useAuth();
   const onboardParam = searchParams.get("onboard");
+  const sourceParam = searchParams.get("source");
+  const prefillParam = searchParams.get("prefill") ?? "";
   const [contents, setContents] = useState<ContentItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -143,6 +146,18 @@ function DashboardPageContent() {
   const [contentSortOrder, setContentSortOrder] = useState<ContentSortOrder>("desc");
   const [deleteTarget, setDeleteTarget] = useState<ContentItem | null>(null);
   const [deletePending, setDeletePending] = useState(false);
+
+  const initialSource = useMemo<SourceKind>(() => {
+    if (
+      sourceParam === "youtube" ||
+      sourceParam === "website" ||
+      sourceParam === "pdf" ||
+      sourceParam === "note"
+    ) {
+      return sourceParam;
+    }
+    return "website";
+  }, [sourceParam]);
 
   const ONBOARDING_DISMISS_KEY = "smartcurator_dashboard_quick_guide_dismissed_v1";
   const hasLoadedOnceRef = useRef(false);
@@ -248,10 +263,10 @@ function DashboardPageContent() {
           const becameCompleted = (prevStatus === "pending" || prevStatus === "processing") && item.status === "completed";
           const becameFailed = (prevStatus === "pending" || prevStatus === "processing") && item.status === "failed";
           if (becameCompleted) {
-            pushToast("success", `${displayTitle(item.title, item.id)} 처리가 완료되었습니다.`);
+            pushToast("success", "콘텐츠 처리가 완료되었습니다.");
           }
           if (becameFailed) {
-            pushToast("error", `${displayTitle(item.title, item.id)} 처리에 실패했습니다.`);
+            pushToast("error", "콘텐츠 처리에 실패했습니다.");
           }
         }
       }
@@ -560,10 +575,12 @@ function DashboardPageContent() {
                   <button
                     type="button"
                     onClick={() => setSelectedContent(item)}
-                    className="mt-2 block w-full text-left text-xs text-[var(--text-secondary)]"
+                    className="mt-2 block w-full text-left text-sm leading-6 text-[var(--text-secondary)]"
                   >
-                    {truncateText(item.summary, SUMMARY_PREVIEW_MAX_LENGTH)}
-                    <span className="ml-1 text-[11px] text-[var(--accent-strong)]">전체 보기</span>
+                    <span className="block whitespace-pre-line">
+                      {truncateText(item.summary, SUMMARY_PREVIEW_MAX_LENGTH)}
+                    </span>
+                    <span className="mt-1 block text-[11px] text-[var(--accent-strong)]">전체 보기</span>
                   </button>
                 )}
                 {item.status === "failed" && item.processing_error && (
@@ -651,7 +668,12 @@ function DashboardPageContent() {
               기사 URL이나 텍스트를 넣으면 백엔드가 요약, 태그, 벡터를 생성합니다.
             </p>
           </div>
-          <QuickAddForm token={token} onCreated={() => void loadContents({ resetPage: true })} />
+          <QuickAddForm
+            token={token}
+            initialSource={initialSource}
+            initialPrefill={prefillParam}
+            onCreated={() => void loadContents({ resetPage: true })}
+          />
           <div className="surface-muted mt-4 rounded-2xl p-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-[var(--text-primary)]">자주 쓰는 태그</h3>
@@ -975,15 +997,15 @@ function DashboardPageContent() {
       />
 
       {toasts.length > 0 && (
-        <div className="pointer-events-none fixed inset-x-0 top-24 z-[70] mx-auto flex w-full max-w-6xl justify-end px-6 sm:px-10">
+        <div className="pointer-events-none fixed right-4 top-24 z-[70] w-auto max-w-[min(280px,calc(100vw-1.5rem))]">
           <div className="space-y-2">
             {toasts.map((toast) => (
               <div
                 key={toast.id}
-                className={`rounded-xl border px-4 py-2 text-sm shadow-card ${
+                className={`rounded-xl border px-3.5 py-2.5 text-sm leading-5 shadow-card backdrop-blur-md ${
                   toast.kind === "success"
-                    ? "border-emerald-300/35 bg-emerald-500/20 text-emerald-100"
-                    : "border-red-300/35 bg-red-500/20 text-red-100"
+                    ? "border-emerald-300/35 bg-emerald-500/18 text-emerald-50"
+                    : "border-red-300/35 bg-red-500/18 text-red-50"
                 }`}
               >
                 {toast.text}

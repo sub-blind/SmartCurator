@@ -1,4 +1,4 @@
-import json
+﻿import json
 import logging
 import re
 from typing import Any, Dict, List
@@ -96,7 +96,7 @@ URL: {url}
 {(content or "")[:5000]}
 
 작성 규칙:
-- 한국어 5~7문장
+- 한국어 5~7문장, 화면에서 5~6줄 정도로 읽히는 길이
 - 핵심 사건, 배경, 영향, 후속 포인트를 포함
 - 과장/추측 없이 사실 중심
 
@@ -246,7 +246,7 @@ URL: {url}
 - 가능한 경우 수치/날짜/비교대상 포함
 - 같은 의미의 key_points/tag는 하나로 합치기
 {{
-  "summary": "핵심 내용을 3~4문장으로 요약",
+  "summary": "핵심 내용을 5~7문장, 화면에서 5~6줄 정도로 읽히게 요약",
   "key_points": ["핵심 포인트1", "핵심 포인트2", "핵심 포인트3"],
   "tags": ["태그1", "태그2", "태그3"],
   "insight": "이 콘텐츠를 읽고 얻을 수 있는 한 줄 인사이트"
@@ -261,9 +261,9 @@ URL: {url}
         chunk_count: int = 1,
     ) -> str:
         summary_guide = (
-            "전체 문서 최종 요약 3~4문장"
+            "전체 문서 최종 요약 5~7문장"
             if chunk_count <= 3
-            else "전체 문서 최종 요약 8~12문장 (짧은 단락 2~3개)"
+            else "전체 문서 최종 요약 9~12문장 (짧은 단락 2~3개)"
         )
         points_guide = (
             '["가장 중요한 포인트1", "가장 중요한 포인트2", "가장 중요한 포인트3"]'
@@ -465,3 +465,5 @@ chunk 요약들:
             seen.add(key)
             deduped.append(part)
         return " ".join(deduped)
+
+

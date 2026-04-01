@@ -7,6 +7,7 @@ from pydantic import BaseModel, HttpUrl
 class ContentCreate(BaseModel):
     title: str
     url: Optional[HttpUrl] = None
+    thumbnail_url: Optional[HttpUrl] = None
     raw_content: Optional[str] = None
     content_type: str = "url"
     is_public: bool = False
@@ -21,6 +22,7 @@ class ContentRead(BaseModel):
     id: int
     title: str
     url: Optional[str] = None
+    thumbnail_url: Optional[str] = None
     content_type: str
     summary: Optional[str] = None
     tags: Optional[List[str]] = None

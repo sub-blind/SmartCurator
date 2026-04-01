@@ -1,7 +1,7 @@
 import asyncio
 import re
 from typing import Any, Dict, List, Optional
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urljoin, urlparse
 from xml.etree.ElementTree import ParseError
 
 import requests
@@ -15,7 +15,7 @@ from youtube_transcript_api import (
 
 
 class ScraperService:
-    """URL 본문 스크래핑 서비스."""
+    """URL 본문과 메타데이터를 추출하는 서비스."""
 
     def __init__(self):
         self.session = requests.Session()
@@ -27,8 +27,8 @@ class ScraperService:
         )
         self.timeout = 12
 
-    async def extract_content(self, url: str) -> Dict[str, str]:
-        """URL에서 본문 텍스트를 추출한다. 실패 시 reader fallback을 시도한다."""
+    async def extract_content(self, url: str) -> Dict[str, Any]:
+        """URL에서 본문과 제목, 썸네일 정보를 추출한다."""
         try:
             normalized_url = (url or "").strip()
             if self._is_youtube_url(normalized_url):
@@ -43,6 +43,7 @@ class ScraperService:
 
             fallback = await self._extract_via_reader(normalized_url)
             if self._is_usable_text(fallback.get("content", "")):
+                await self._ensure_fallback_thumbnail(normalized_url, primary, fallback)
                 return fallback
 
             return {
@@ -54,8 +55,8 @@ class ScraperService:
             if status_code == 451:
                 return {
                     "error": (
-                        "해당 언론사/페이지는 정책 또는 지역 제한(451)으로 자동 수집이 차단되었습니다. "
-                        "본문 텍스트 붙여넣기 또는 PDF/TXT 업로드를 이용해주세요."
+                        "해당 링크는 정책 또는 지역 제한(451)으로 자동 수집이 차단되었습니다. "
+                        "본문 텍스트를 붙여넣거나 PDF/TXT 업로드를 이용해 주세요."
                     ),
                     "success": False,
                 }
@@ -65,8 +66,8 @@ class ScraperService:
         except Exception as e:
             return {"error": f"스크래핑 실패: {e}", "success": False}
 
-    async def _extract_youtube_transcript(self, url: str) -> Dict[str, str]:
-        """YouTube URL에서 자막을 추출한다."""
+    async def _extract_youtube_transcript(self, url: str) -> Dict[str, Any]:
+        """YouTube URL에서 자막과 메타데이터를 추출한다."""
         video_id = self._extract_youtube_video_id(url)
         if not video_id:
             return {
@@ -99,7 +100,7 @@ class ScraperService:
         if transcript_items is None:
             if isinstance(last_exception, NoTranscriptFound):
                 return {
-                    "error": "해당 유튜브 영상에 사용 가능한 자막이 없습니다. 자막이 있는 영상으로 시도해주세요.",
+                    "error": "해당 유튜브 영상에는 사용 가능한 자막이 없습니다. 자막이 있는 영상으로 시도해 주세요.",
                     "success": False,
                 }
             if isinstance(last_exception, TranscriptsDisabled):
@@ -110,7 +111,7 @@ class ScraperService:
                 return {
                     "error": (
                         "유튜브 자막 응답 파싱에 실패했습니다. "
-                        "현재 네트워크/환경에서 YouTube 자막 API가 차단되었을 수 있습니다."
+                        "현재 네트워크 또는 환경에서 YouTube 자막 API가 차단되었을 수 있습니다."
                     ),
                     "success": False,
                 }
@@ -125,11 +126,12 @@ class ScraperService:
             "title": title,
             "content": transcript_text,
             "description": "유튜브 자막 기반 추출",
+            "thumbnail_url": self._build_youtube_thumbnail_url(video_id),
             "url": url,
             "success": True,
         }
 
-    async def _extract_via_html(self, url: str) -> Dict[str, str]:
+    async def _extract_via_html(self, url: str) -> Dict[str, Any]:
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
             None,
@@ -141,17 +143,19 @@ class ScraperService:
         title = self._extract_title(soup, url)
         content = self._extract_main_content(soup)
         description = self._extract_description(soup)
+        thumbnail_url = self._extract_thumbnail_url(soup, url)
 
         return {
             "title": title,
             "content": content,
             "description": description,
+            "thumbnail_url": thumbnail_url,
             "url": url,
             "success": True,
         }
 
-    async def _extract_via_reader(self, url: str) -> Dict[str, str]:
-        """동적 페이지/차단 페이지 대비 텍스트 reader 경로 fallback."""
+    async def _extract_via_reader(self, url: str) -> Dict[str, Any]:
+        """동적 페이지나 차단 페이지 대비 텍스트 reader fallback."""
         reader_url = f"https://r.jina.ai/http://{url.lstrip('/').replace('https://', '').replace('http://', '')}"
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
@@ -168,9 +172,39 @@ class ScraperService:
             "title": title,
             "content": cleaned,
             "description": None,
+            "thumbnail_url": None,
             "url": url,
             "success": True,
         }
+
+    async def _ensure_fallback_thumbnail(
+        self, url: str, primary: Dict[str, Any], fallback: Dict[str, Any]
+    ) -> None:
+        """reader로 본문만 가져온 경우 썸네일을 HTML 메타에서 채운다."""
+        existing = ((fallback.get("thumbnail_url") or primary.get("thumbnail_url")) or "").strip()
+        if existing:
+            fallback["thumbnail_url"] = existing
+            return
+        thumb = await self._fetch_og_thumbnail_only(url=fallback.get("url") or url)
+        if thumb:
+            fallback["thumbnail_url"] = thumb
+
+    async def _fetch_og_thumbnail_only(self, url: str) -> Optional[str]:
+        """본문 파싱 없이 og/twitter 메타만으로 대표 이미지 URL을 찾는다."""
+        if not (url or "").strip():
+            return None
+        loop = asyncio.get_event_loop()
+
+        def _sync() -> Optional[str]:
+            try:
+                response = self.session.get(url.strip(), timeout=self.timeout)
+                response.raise_for_status()
+                soup = BeautifulSoup(response.content, "html.parser")
+                return self._extract_thumbnail_url(soup, url)
+            except Exception:
+                return None
+
+        return await loop.run_in_executor(None, _sync)
 
     def _extract_title(self, soup: BeautifulSoup, url: str) -> str:
         og_title = soup.find("meta", property="og:title")
@@ -234,6 +268,29 @@ class ScraperService:
             return meta_desc["content"].strip()
         return None
 
+    def _extract_thumbnail_url(self, soup: BeautifulSoup, base_url: str) -> Optional[str]:
+        candidates = [
+            soup.find("meta", property="og:image"),
+            soup.find("meta", property="og:image:secure_url"),
+            soup.find("meta", attrs={"name": "twitter:image"}),
+            soup.find("meta", property="twitter:image"),
+            soup.find("meta", property="twitter:image:src"),
+            soup.find("meta", property="og:image:url"),
+        ]
+        for candidate in candidates:
+            content = (candidate.get("content") or "").strip() if candidate else ""
+            if content and not content.lower().startswith("data:"):
+                return urljoin(base_url, content)
+        for link in soup.find_all("link"):
+            href = (link.get("href") or "").strip()
+            if not href:
+                continue
+            rel = link.get("rel")
+            rel_parts = rel if isinstance(rel, (list, tuple)) else [*str(rel or "").split()]
+            if any(str(r).lower() == "image_src" for r in rel_parts):
+                return urljoin(base_url, href)
+        return None
+
     def _is_usable_text(self, text: str) -> bool:
         normalized = " ".join((text or "").split()).strip().lower()
         if not normalized:
@@ -289,7 +346,7 @@ class ScraperService:
         return bool(video_id and re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id))
 
     def _fetch_best_youtube_transcript(self, video_id: str) -> List[Any]:
-        """가능한 자막을 우선순위로 시도해 transcript를 가져온다."""
+        """가능한 자막을 우선순위대로 시도해서 transcript를 가져온다."""
         transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
 
         try:
@@ -329,9 +386,12 @@ class ScraperService:
             pass
         return f"YouTube 영상 {video_id}"
 
+    def _build_youtube_thumbnail_url(self, video_id: str) -> str:
+        return f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+
     @staticmethod
     def _transcript_snippet_text(item: Any) -> str:
-        """youtube-transcript-api: 예전 dict 또는 FetchedTranscriptSnippet 등 객체 모두 지원."""
+        """youtube-transcript-api의 dict/객체 응답을 모두 지원한다."""
         if isinstance(item, dict):
             return str(item.get("text", "")).strip()
         text = getattr(item, "text", None)

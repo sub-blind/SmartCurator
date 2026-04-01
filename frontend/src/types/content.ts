@@ -7,6 +7,7 @@ export type ContentItem = {
   id: number;
   title: string;
   url?: string | null;
+  thumbnail_url?: string | null;
   content_type: string;
   summary?: string | null;
   tags?: string[] | null;

@@ -1,6 +1,6 @@
 from typing import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker, Session
 
 from app.core.config import settings
@@ -16,6 +16,13 @@ sync_engine = create_engine(
     pool_pre_ping=True,
     pool_recycle=3600,
 )
+
+with sync_engine.begin() as conn:
+    inspector = inspect(conn)
+    if "contents" in inspector.get_table_names():
+        column_names = {column["name"] for column in inspector.get_columns("contents")}
+        if "thumbnail_url" not in column_names:
+            conn.execute(text("ALTER TABLE contents ADD COLUMN thumbnail_url VARCHAR(2000)"))
 
 SessionLocal = sessionmaker(bind=sync_engine, autocommit=False, autoflush=False, class_=Session)
 

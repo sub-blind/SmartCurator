@@ -15,6 +15,7 @@ class Content(Base):
 
     title = Column(String(500), nullable=False)
     url = Column(String(2000), nullable=True)
+    thumbnail_url = Column(String(2000), nullable=True)
     raw_content = Column(Text, nullable=True)
     content_type = Column(String(50), default="url")
 

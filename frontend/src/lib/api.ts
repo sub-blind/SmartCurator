@@ -89,17 +89,19 @@ export const api = {
   quickAddContent: (params: {
     title: string;
     url?: string;
+    thumbnail_url?: string;
     raw_content?: string;
     content_type: string;
     is_public: boolean;
     token: string;
   }) =>
-    smartFetch("/contents/", {
+    smartFetch<ContentItem>("/contents/", {
       method: "POST",
       token: params.token,
       body: {
         title: params.title,
         url: params.url,
+        thumbnail_url: params.thumbnail_url,
         raw_content: params.raw_content,
         content_type: params.content_type,
         is_public: params.is_public
@@ -127,6 +129,11 @@ export const api = {
     smartFetch<ContentItem[]>("/contents/my?skip=0&limit=50", {
       method: "GET",
       token
+    }),
+  getContent: (id: number, token: string) =>
+    smartFetch<ContentItem>(`/contents/${id}`, {
+      method: "GET",
+      token,
     }),
   deleteContent: (id: number, token: string) =>
     smartFetch<{ message: string }>(`/contents/${id}`, {
