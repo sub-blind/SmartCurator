@@ -106,12 +106,12 @@ function StatusBadge({ status }: { status: ContentItem["status"] }) {
     return <span className={`${base} bg-emerald-500/20 text-emerald-200`}>완료</span>;
   }
   if (status === "processing") {
-    return <span className={`${base} bg-blue-500/20 text-blue-200`}>처리 중</span>;
+    return <span className={`${base} bg-blue-500/20 text-[var(--accent-strong)]`}>처리 중</span>;
   }
   if (status === "failed") {
     return <span className={`${base} bg-red-500/20 text-red-200`}>실패</span>;
   }
-  return <span className={`${base} bg-slate-500/20 text-slate-200`}>대기</span>;
+  return <span className={`${base} bg-black/10 text-[var(--text-secondary)]`}>대기</span>;
 }
 
 function DashboardPageContent() {
@@ -385,7 +385,7 @@ function DashboardPageContent() {
   };
 
   if (!initialized) {
-    return <p className="text-sm text-slate-300">초기화 중입니다...</p>;
+    return <p className="text-sm text-[var(--text-secondary)]">초기화 중입니다...</p>;
   }
 
   if (!token) {
@@ -673,7 +673,7 @@ function DashboardPageContent() {
                       }}
                       className={`rounded-full px-2.5 py-1 text-[11px] transition ${
                         active
-                          ? "border border-blue-300/50 bg-blue-500/25 text-blue-100"
+                          ? "border border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"
                           : "border border-[var(--border-strong)] bg-[var(--surface-muted)] text-[var(--text-secondary)] hover:border-[var(--accent)]"
                       }`}
                       title={`#${item.tag} 콘텐츠 ${item.count}개`}
@@ -691,8 +691,8 @@ function DashboardPageContent() {
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="surface-card space-y-4 rounded-3xl p-6">
           <div>
-            <h2 className="text-lg font-semibold text-white">의미론적 검색</h2>
-            <p className="text-xs text-slate-300">
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">의미론적 검색</h2>
+            <p className="text-xs text-[var(--text-secondary)]">
               저장한 콘텐츠를 키워드가 아니라 의미 기준으로 검색합니다. 결과는 핵심 snippet 중심으로 보여줍니다.
             </p>
           </div>
@@ -711,8 +711,8 @@ function DashboardPageContent() {
                   title={mode.hint}
                   className={`whitespace-nowrap rounded-full px-3 py-1 text-xs transition ${
                     selected
-                      ? "border border-blue-400 bg-blue-500/20 text-blue-100"
-                      : "border border-white/15 text-slate-300 hover:border-white/30"
+                      ? "border border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"
+                      : "border border-[var(--border-strong)] text-[var(--text-secondary)] hover:border-[var(--accent)]"
                   }`}
                 >
                   {mode.label}
@@ -725,18 +725,18 @@ function DashboardPageContent() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="예: 쌈짓돈 논란 핵심 쟁점"
-              className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-white focus:border-brand focus:outline-none"
+              className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface-elevated)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
             />
             <button
               type="button"
               onClick={handleSemanticSearch}
               disabled={searchLoading}
-              className="whitespace-nowrap rounded-xl bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+              className="whitespace-nowrap rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
             >
               {searchLoading ? "검색 중.." : "검색"}
             </button>
           </div>
-          {searchMessage && <p className="text-xs text-slate-300">{searchMessage}</p>}
+          {searchMessage && <p className="text-xs text-[var(--text-secondary)]">{searchMessage}</p>}
           <div className="space-y-3">
             {searchResults.map((result) => {
               const text = cleanSnippet(result.top_snippet || result.summary || "매칭된 발췌문이 없습니다.");
@@ -745,24 +745,24 @@ function DashboardPageContent() {
               return (
                 <article
                   key={result.content_id}
-                  className="rounded-2xl border border-white/10 bg-slate-950/60 p-4"
+                  className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4"
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-sm font-semibold text-white">{displayTitle(result.title, result.content_id)}</h3>
-                    <span className="text-[11px] text-blue-200">
+                    <h3 className="text-sm font-semibold text-[var(--text-primary)]">{displayTitle(result.title, result.content_id)}</h3>
+                    <span className="text-[11px] text-[var(--accent-strong)]">
                       유사도 {result.similarity_score.toFixed(3)}
                     </span>
                   </div>
-                  <p className="mt-1 text-[11px] text-slate-400">{getMatchReason(searchQuery, result)}</p>
+                  <p className="mt-1 text-[11px] text-[var(--text-muted)]">{getMatchReason(searchQuery, result)}</p>
                   <div className="mt-2">
-                    <p className="whitespace-pre-wrap text-xs text-slate-300">
+                    <p className="whitespace-pre-wrap text-xs text-[var(--text-secondary)]">
                       {expanded || !isLong ? text : truncateText(text, 220)}
                     </p>
                     {isLong && (
                       <button
                         type="button"
                         onClick={() => toggleSearchResult(result.content_id)}
-                        className="mt-1 text-[11px] text-blue-300 hover:underline"
+                        className="mt-1 text-[11px] text-[var(--accent-strong)] hover:underline"
                       >
                         {expanded ? "접기" : "더보기"}
                       </button>
@@ -773,7 +773,7 @@ function DashboardPageContent() {
                       {result.tags.map((tag) => (
                         <span
                           key={tag}
-                          className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-200"
+                          className="rounded-full bg-black/10 px-2 py-0.5 text-[11px] text-[var(--text-secondary)]"
                         >
                           #{tag}
                         </span>
@@ -788,8 +788,8 @@ function DashboardPageContent() {
 
         <section className="surface-card space-y-4 rounded-3xl p-6">
           <div>
-            <h2 className="text-lg font-semibold text-white">AI 어시스턴트</h2>
-            <p className="text-xs text-slate-300">
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">AI 어시스턴트</h2>
+            <p className="text-xs text-[var(--text-secondary)]">
               저장한 기사와 노트의 근거 문단을 바탕으로 질문에 답변합니다.
             </p>
           </div>
@@ -799,7 +799,7 @@ function DashboardPageContent() {
               onChange={(e) => setQuestion(e.target.value)}
               rows={4}
               placeholder="예: LG CNS가 어디에 투자했는지, 관련 기사 근거만 정리해줘"
-              className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-white focus:border-brand focus:outline-none"
+              className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface-elevated)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
             />
             <button
               type="button"
@@ -812,17 +812,17 @@ function DashboardPageContent() {
           </div>
           {chatMessage && <p className="text-xs text-red-300">{chatMessage}</p>}
           {chatAnswer && (
-            <div className="space-y-3 rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+            <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-white">답변</p>
-                <span className="text-[11px] text-blue-200">
+                <p className="text-sm font-semibold text-[var(--text-primary)]">답변</p>
+                <span className="text-[11px] text-[var(--accent-strong)]">
                   신뢰도 {chatAnswer.confidence.toFixed(3)}
                 </span>
               </div>
-              <p className="whitespace-pre-wrap text-sm text-slate-200">{chatAnswer.answer}</p>
+              <p className="whitespace-pre-wrap text-sm text-[var(--text-secondary)]">{chatAnswer.answer}</p>
               {chatAnswer.sources.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs font-medium text-slate-300">근거 출처</p>
+                  <p className="text-xs font-medium text-[var(--text-secondary)]">근거 출처</p>
                   {chatAnswer.sources.map((source, index) => {
                     const sourceKey = `${source.content_id}-${source.chunk_index}-${index}`;
                     const expanded = expandedSources.has(sourceKey);
@@ -831,22 +831,22 @@ function DashboardPageContent() {
                     return (
                       <div
                         key={sourceKey}
-                        className="rounded-xl border border-white/10 bg-slate-900/70 p-3"
+                        className="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-3"
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-xs font-medium text-white">{displayTitle(source.title, source.content_id)}</p>
-                          <span className="text-[11px] text-slate-400">
+                          <p className="text-xs font-medium text-[var(--text-primary)]">{displayTitle(source.title, source.content_id)}</p>
+                          <span className="text-[11px] text-[var(--text-muted)]">
                             청크 {source.chunk_index} · {source.similarity_score.toFixed(3)}
                           </span>
                         </div>
-                        <p className="mt-1 whitespace-pre-wrap text-xs text-slate-300">
+                        <p className="mt-1 whitespace-pre-wrap text-xs text-[var(--text-secondary)]">
                           {expanded || !isLong ? cleanedSnippet : truncateText(cleanedSnippet, 220)}
                         </p>
                         {isLong && (
                           <button
                             type="button"
                             onClick={() => toggleSource(sourceKey)}
-                            className="mt-1 text-[11px] text-blue-300 hover:underline"
+                            className="mt-1 text-[11px] text-[var(--accent-strong)] hover:underline"
                           >
                             {expanded ? "접기" : "더보기"}
                           </button>
@@ -904,9 +904,9 @@ function DashboardPageContent() {
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <StatusBadge status={selectedContent.status} />
               {selectedContent.is_public && (
-                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] text-slate-100">공개</span>
+                <span className="rounded-full bg-black/10 px-2 py-0.5 text-[11px] text-[var(--text-primary)]">공개</span>
               )}
-              <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-200">
+              <span className="rounded-full bg-black/10 px-2 py-0.5 text-[11px] text-[var(--text-secondary)]">
                 {selectedContent.content_type}
               </span>
               {isYouTubeUrl(selectedContent.url) && (
@@ -935,7 +935,7 @@ function DashboardPageContent() {
                 <p className="mb-2 text-xs font-semibold text-[var(--text-secondary)]">태그</p>
                 <div className="flex flex-wrap gap-1.5">
                   {selectedContent.tags.map((tag) => (
-                    <span key={tag} className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-200">
+                    <span key={tag} className="rounded-full bg-black/10 px-2 py-0.5 text-[11px] text-[var(--text-secondary)]">
                       #{tag}
                     </span>
                   ))}
@@ -998,7 +998,7 @@ function DashboardPageContent() {
 
 export default function DashboardPage() {
   return (
-    <Suspense fallback={<p className="text-sm text-slate-300">대시보드를 준비 중입니다...</p>}>
+    <Suspense fallback={<p className="text-sm text-[var(--text-secondary)]">대시보드를 준비 중입니다...</p>}>
       <DashboardPageContent />
     </Suspense>
   );

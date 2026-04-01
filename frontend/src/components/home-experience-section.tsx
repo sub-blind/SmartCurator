@@ -8,7 +8,7 @@ import { api } from "@/lib/api";
 import type { SearchResultItem } from "@/types/content";
 import { Section } from "./ui/section";
 
-const DEFAULT_QUERY = "AI 에이전트 도입 시 주의할 점";
+const DEFAULT_QUERY = "AI 에이전트 도입 전 주의사항";
 
 function truncateText(text: string, maxLength: number) {
   const normalized = (text || "").replace(/\s+/g, " ").trim();
@@ -49,12 +49,8 @@ export function HomeExperienceSection() {
 
   if (!initialized) {
     return (
-      <Section
-        id="experience"
-        title="잠깐만요"
-        description="화면 불러오는 중이에요."
-      >
-        <p className="text-sm text-slate-300">로딩 중...</p>
+      <Section id="experience" title="조금만요" description="화면을 불러오는 중이에요.">
+        <p className="text-sm text-[var(--text-secondary)]">로딩 중...</p>
       </Section>
     );
   }
@@ -63,7 +59,7 @@ export function HomeExperienceSection() {
     return (
       <Section
         id="quick-guide"
-        title="대시보드에서 이렇게 쓰면 돼요"
+        title="대시보드에서는 이렇게 쓰면 돼요"
         description="순서는 대충 이 세 가지예요."
       >
         <div className="grid gap-4 md:grid-cols-3">
@@ -76,25 +72,25 @@ export function HomeExperienceSection() {
             {
               step: "2",
               title: "찾기",
-              detail: "검색할 때 쓴 말이 저장할 때랑 달라도, 비슷한 글을 끌어옵니다.",
+              detail: "검색할 때 딱 맞는 단어가 안 떠올라도 비슷한 뜻의 글을 찾습니다.",
             },
             {
               step: "3",
               title: "물어보기",
-              detail: "질문하면 답과 함께 어떤 문장을 근거로 썼는지 짧게 보여줍니다.",
+              detail: "질문하면 답과 함께 어떤 문장을 근거로 봤는지도 보여줍니다.",
             },
           ].map((item) => (
-            <article key={item.step} className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
-              <p className="text-xs text-blue-300">{item.step}단계</p>
-              <h3 className="mt-1 text-base font-semibold text-white">{item.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-200">{item.detail}</p>
+            <article key={item.step} className="surface-muted rounded-2xl p-4">
+              <p className="text-xs text-[var(--accent-strong)]">{item.step}단계</p>
+              <h3 className="mt-1 text-base font-semibold text-[var(--text-primary)]">{item.title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">{item.detail}</p>
             </article>
           ))}
         </div>
         <div className="flex flex-wrap gap-3">
           <Link
             href="/dashboard"
-            className="rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
+            className="rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
           >
             대시보드로 이동
           </Link>
@@ -110,62 +106,68 @@ export function HomeExperienceSection() {
       description="공개 샘플만 검색해 볼 수 있어요."
     >
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:items-start">
-        <div className="space-y-3 rounded-2xl border border-white/10 bg-slate-900/50 p-4">
+        <div className="surface-muted space-y-3 rounded-2xl p-4">
           <div className="flex gap-2">
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="예: 기업 AI 도입의 실패 원인"
-              className="w-full rounded-xl border border-white/15 bg-slate-950/70 px-3 py-2 text-sm text-white focus:border-brand focus:outline-none"
+              placeholder="예: 기업 AI 도입 실패 원인"
+              className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface-elevated)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
             />
             <button
               type="button"
               onClick={handleGuestSearch}
               disabled={searchDisabled}
-              className="min-w-[110px] whitespace-nowrap rounded-xl bg-brand px-4 py-2 text-sm font-semibold leading-none text-white hover:bg-blue-500 disabled:opacity-50"
+              className="min-w-[110px] whitespace-nowrap rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold leading-none text-white hover:opacity-90 disabled:opacity-50"
             >
-              {loading ? "검색 중" : "샘플 검색"}
+              {loading ? "검색 중..." : "샘플 검색"}
             </button>
           </div>
-          {error && <p className="text-xs text-slate-300">{error}</p>}
+          {error && <p className="text-xs text-[var(--text-secondary)]">{error}</p>}
           <div className="space-y-3">
             {results.length === 0 && !error && (
-              <div className="rounded-xl border border-dashed border-white/15 bg-slate-950/40 p-4">
-                <p className="text-sm font-medium text-slate-100">검색 전 가이드</p>
-                <p className="mt-1 text-xs leading-6 text-slate-200">
-                  위에 단어 넣고 샘플 검색을 누르면, 비슷한 글 제목이랑 짧은 발췌가 나옵니다.
+              <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-elevated)] p-4">
+                <p className="text-sm font-medium text-[var(--text-primary)]">검색 전 가이드</p>
+                <p className="mt-1 text-xs leading-6 text-[var(--text-secondary)]">
+                  위에 단어를 넣고 샘플 검색을 누르면 비슷한 뜻의 글 제목이랑 짧은 발췌가 나옵니다.
                 </p>
               </div>
             )}
             {results.map((result) => (
-              <article key={result.content_id} className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
+              <article key={result.content_id} className="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-3">
                 <div className="flex items-start justify-between gap-3">
-                  <h3 className="text-sm font-semibold text-white">{result.title || `콘텐츠 #${result.content_id}`}</h3>
-                  <span className="shrink-0 text-[11px] text-blue-200">{result.similarity_score.toFixed(3)}</span>
+                  <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+                    {result.title || `콘텐츠 #${result.content_id}`}
+                  </h3>
+                  <span className="shrink-0 text-[11px] text-[var(--accent-strong)]">
+                    {result.similarity_score.toFixed(3)}
+                  </span>
                 </div>
-                <p className="mt-2 text-xs text-slate-300">{truncateText(result.top_snippet || result.summary, 180)}</p>
+                <p className="mt-2 text-xs text-[var(--text-secondary)]">
+                  {truncateText(result.top_snippet || result.summary, 180)}
+                </p>
               </article>
             ))}
           </div>
         </div>
 
-        <div className="flex min-h-[250px] flex-col justify-center space-y-4 rounded-2xl border border-white/10 bg-slate-900/40 p-4">
-          <h3 className="text-base font-semibold text-white">로그인하면</h3>
-          <ul className="space-y-2 text-sm leading-6 text-slate-200">
-            <li>내 링크·파일 올리고 요약 받기</li>
-            <li>내가 넣은 글만 검색 대상으로</li>
-            <li>질문할 때 근거 문장까지 같이 보기</li>
+        <div className="surface-muted flex min-h-[250px] flex-col justify-center space-y-4 rounded-2xl p-4">
+          <h3 className="text-base font-semibold text-[var(--text-primary)]">로그인하면</h3>
+          <ul className="space-y-2 text-sm leading-6 text-[var(--text-secondary)]">
+            <li>내 링크, 메모, 파일을 모아두고 요약 받기</li>
+            <li>태그와 의미 검색으로 다시 찾기</li>
+            <li>질문과 함께 근거 문장까지 보기</li>
           </ul>
           <div className="flex gap-2">
             <Link
               href="/login"
-              className="rounded-full border border-white/20 px-4 py-2 text-sm text-slate-100 hover:border-brand"
+              className="rounded-full border border-[var(--border-strong)] px-4 py-2 text-sm text-[var(--text-primary)] hover:border-[var(--accent)]"
             >
               로그인
             </Link>
             <Link
               href="/register"
-              className="rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
+              className="rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
             >
               회원가입
             </Link>

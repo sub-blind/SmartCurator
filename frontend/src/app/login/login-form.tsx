@@ -44,53 +44,58 @@ export function LoginForm() {
   };
 
   return (
-    <div className="mx-auto max-w-md space-y-6 rounded-3xl border border-white/10 bg-slate-900/60 p-8 shadow-card">
+    <div className="surface-card mx-auto max-w-md space-y-6 rounded-3xl p-8">
       <div className="space-y-2">
-        <h1 className="text-2xl font-semibold text-white">
+        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">
           {isReauthMode ? "세션 연장 로그인" : "로그인"}
         </h1>
-        <p className="text-sm text-slate-300">
+        <p className="text-sm text-[var(--text-secondary)]">
           {isReauthMode
-            ? "세션 만료 전 연장을 위해 비밀번호를 다시 확인합니다."
-            : "SmartCurator 계정으로 로그인하여 저장한 콘텐츠를 확인하고, 요약/검색/챗봇 기능을 사용해 보세요."}
+            ? "세션 만료 전에 다시 인증해서 작업을 이어갑니다."
+            : "SmartCurator 계정으로 로그인해서 저장한 콘텐츠와 검색, AI 질문 기능을 사용해 보세요."}
         </p>
       </div>
+
       <form onSubmit={handleSubmit} className="space-y-4">
-        <label className="text-xs text-slate-300">
+        <label className="block text-xs text-[var(--text-secondary)]">
           이메일
           <input
             type="email"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-white focus:border-brand focus:outline-none"
+            className="mt-1 w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface-elevated)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
           />
         </label>
-        <label className="text-xs text-slate-300">
+
+        <label className="block text-xs text-[var(--text-secondary)]">
           비밀번호
           <input
             type="password"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-white focus:border-brand focus:outline-none"
+            className="mt-1 w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface-elevated)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
           />
         </label>
+
         <button
           type="submit"
           disabled={loading}
-          className="mt-2 w-full rounded-xl bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:opacity-50"
+          className="mt-2 w-full rounded-xl bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
         >
           {loading ? "로그인 중..." : "로그인"}
         </button>
+
         {error && <p className="text-xs text-red-300">{error}</p>}
       </form>
-      <p className="text-xs text-slate-400">
+
+      <p className="text-xs text-[var(--text-muted)]">
         아직 계정이 없다면{" "}
-        <Link href="/register" className="text-blue-300 underline-offset-2 hover:underline">
+        <Link href="/register" className="text-[var(--accent-strong)] underline-offset-2 hover:underline">
           회원가입
         </Link>
-        을 먼저 진행해 주세요.
+        으로 이동해 주세요.
       </p>
     </div>
   );

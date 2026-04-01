@@ -11,15 +11,11 @@ export function Pill({ label, variant = "default" }: PillProps) {
       className={clsx(
         "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium",
         variant === "accent"
-          ? "bg-brand/20 text-blue-200 ring-1 ring-blue-500/30"
-          : "bg-white/10 text-slate-200"
+          ? "bg-[var(--accent-soft)] text-[var(--accent-strong)] ring-1 ring-[var(--border-strong)]"
+          : "bg-[var(--surface-muted)] text-[var(--text-secondary)]"
       )}
     >
       {label}
     </span>
   );
 }
-
-
-
-
