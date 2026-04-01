@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { QuickAddForm } from "@/components/forms/quick-add-form";
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { api } from "@/lib/api";
 import type { ChatAnswer, ContentItem, SearchResultItem } from "@/types/content";
 
@@ -30,6 +31,8 @@ type TagStat = {
   tag: string;
   count: number;
 };
+
+type ContentSortOrder = "desc" | "asc";
 
 function truncateText(text: string, maxLength: number) {
   const normalized = (text || "").replace(/\s+/g, " ").trim();
@@ -137,6 +140,9 @@ function DashboardPageContent() {
   const [currentContentsPage, setCurrentContentsPage] = useState(1);
   const [toasts, setToasts] = useState<DashboardToast[]>([]);
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
+  const [contentSortOrder, setContentSortOrder] = useState<ContentSortOrder>("desc");
+  const [deleteTarget, setDeleteTarget] = useState<ContentItem | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
 
   const ONBOARDING_DISMISS_KEY = "smartcurator_dashboard_quick_guide_dismissed_v1";
   const hasLoadedOnceRef = useRef(false);
@@ -147,9 +153,9 @@ function DashboardPageContent() {
     return [...contents].sort((a, b) => {
       const aTime = new Date(a.updated_at || a.created_at).getTime();
       const bTime = new Date(b.updated_at || b.created_at).getTime();
-      return bTime - aTime;
+      return contentSortOrder === "desc" ? bTime - aTime : aTime - bTime;
     });
-  }, [contents]);
+  }, [contents, contentSortOrder]);
 
   const tagStats = useMemo<TagStat[]>(() => {
     const counter = new Map<string, number>();
@@ -362,27 +368,43 @@ function DashboardPageContent() {
     }
   };
 
+  const handleDeleteContent = async () => {
+    if (!token || !deleteTarget) return;
+    setDeletePending(true);
+    try {
+      await api.deleteContent(deleteTarget.id, token);
+      setContents((prev) => prev.filter((content) => content.id !== deleteTarget.id));
+      setSelectedContent((prev) => (prev?.id === deleteTarget.id ? null : prev));
+      setDeleteTarget(null);
+      pushToast("success", `${displayTitle(deleteTarget.title, deleteTarget.id)} 콘텐츠를 삭제했습니다.`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "삭제에 실패했습니다.");
+    } finally {
+      setDeletePending(false);
+    }
+  };
+
   if (!initialized) {
     return <p className="text-sm text-slate-300">초기화 중입니다...</p>;
   }
 
   if (!token) {
     return (
-      <div className="mx-auto max-w-md space-y-4 rounded-3xl border border-white/10 bg-slate-900/60 p-8 text-center shadow-card">
-        <h1 className="text-2xl font-semibold text-white">로그인이 필요합니다</h1>
-        <p className="mt-2 text-sm text-slate-300">
+      <div className="surface-card mx-auto max-w-md space-y-4 rounded-3xl p-8 text-center">
+        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">로그인이 필요합니다</h1>
+        <p className="mt-2 text-sm text-[var(--text-secondary)]">
           대시보드에서는 저장한 콘텐츠, 검색, AI 어시스턴트 기능을 사용할 수 있습니다.
         </p>
         <div className="mt-4 flex justify-center gap-3">
           <Link
             href="/login"
-            className="rounded-full bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-blue-500"
+            className="rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
           >
             로그인
           </Link>
           <Link
             href="/register"
-            className="rounded-full border border-white/15 px-4 py-2 text-sm font-medium text-slate-100 hover:border-brand"
+            className="rounded-full border border-[var(--border-strong)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] hover:border-[var(--accent)]"
           >
             회원가입
           </Link>
@@ -392,14 +414,14 @@ function DashboardPageContent() {
   }
 
   return (
-    <div className="space-y-6">
+      <div className="space-y-6">
       {showQuickGuide && (
-        <section className="rounded-3xl border border-blue-400/30 bg-blue-500/10 p-5 shadow-card">
+        <section className="surface-card rounded-3xl p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-blue-200">빠른 가이드</p>
-              <h2 className="mt-1 text-lg font-semibold text-white">지금 바로 쓰는 3단계</h2>
-              <p className="mt-1 text-sm text-slate-200">
+              <p className="text-xs uppercase tracking-[0.2em] text-[var(--accent-strong)]">빠른 가이드</p>
+              <h2 className="mt-1 text-lg font-semibold text-[var(--text-primary)]">지금 바로 쓰는 3단계</h2>
+              <p className="mt-1 text-sm text-[var(--text-secondary)]">
                 1) 콘텐츠 추가 2) 의미 검색 3) AI 질의 순서로 시작하면 가장 빨리 결과를 볼 수 있어요.
               </p>
             </div>
@@ -409,7 +431,7 @@ function DashboardPageContent() {
                 setShowQuickGuide(false);
                 window.localStorage.setItem(ONBOARDING_DISMISS_KEY, "1");
               }}
-              className="shrink-0 rounded-full border border-white/20 px-3 py-1 text-xs text-slate-100 hover:border-white/40"
+              className="shrink-0 rounded-full border border-[var(--border-strong)] px-3 py-1 text-xs text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--text-primary)]"
             >
               가이드 닫기
             </button>
@@ -418,16 +440,16 @@ function DashboardPageContent() {
       )}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <section className="self-start space-y-3 rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-card lg:sticky lg:top-28">
+        <section className="surface-card self-start space-y-3 rounded-3xl p-6 lg:sticky lg:top-28">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-xl font-semibold text-white">내 콘텐츠</h1>
-              <p className="text-sm text-slate-200">
+              <h1 className="text-xl font-semibold text-[var(--text-primary)]">내 콘텐츠</h1>
+              <p className="text-sm text-[var(--text-secondary)]">
                 저장한 기사와 노트의 처리 상태, 요약, 태그를 확인합니다.
               </p>
               {activeTagFilter && (
                 <div className="mt-2 flex items-center gap-2">
-                  <span className="rounded-full border border-blue-300/40 bg-blue-500/20 px-2 py-0.5 text-[11px] text-blue-100">
+                  <span className="rounded-full border border-[var(--accent)] bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] text-[var(--accent-strong)]">
                     #{activeTagFilter}
                   </span>
                   <button
@@ -436,20 +458,36 @@ function DashboardPageContent() {
                       setActiveTagFilter(null);
                       setCurrentContentsPage(1);
                     }}
-                    className="text-[11px] text-slate-300 underline-offset-2 hover:underline"
+                    className="text-[11px] text-[var(--text-secondary)] underline-offset-2 hover:underline"
                   >
                     필터 해제
                   </button>
                 </div>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => loadContents({ resetPage: true })}
-              className="shrink-0 whitespace-nowrap rounded-full border border-white/15 px-3 py-1 text-xs text-slate-200 hover:border-brand"
-            >
-              새로고침
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-[var(--surface-muted)] px-3 py-1 text-xs text-[var(--text-secondary)]">
+                <span>정렬</span>
+                <select
+                  value={contentSortOrder}
+                  onChange={(event) => {
+                    setContentSortOrder(event.target.value as ContentSortOrder);
+                    setCurrentContentsPage(1);
+                  }}
+                  className="bg-transparent text-[var(--text-primary)] focus:outline-none"
+                >
+                  <option value="desc">최신순</option>
+                  <option value="asc">오래된순</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => loadContents({ resetPage: true })}
+                className="shrink-0 whitespace-nowrap rounded-full border border-[var(--border-strong)] px-3 py-1 text-xs text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--text-primary)]"
+              >
+                새로고침
+              </button>
+            </div>
           </div>
           {activeQueueCount > 0 && (
             <div className="rounded-2xl border border-sky-300/25 bg-sky-500/10 p-3">
@@ -464,11 +502,11 @@ function DashboardPageContent() {
               </div>
             </div>
           )}
-          {loading && <p className="text-xs text-slate-400">불러오는 중...</p>}
+          {loading && <p className="text-xs text-[var(--text-muted)]">불러오는 중...</p>}
           {message && <p className="text-xs text-red-300">{message}</p>}
           <div className="mt-2 space-y-3">
             {filteredContents.length === 0 && !loading && (
-              <p className="text-sm text-slate-400">
+              <p className="text-sm text-[var(--text-muted)]">
                 {activeTagFilter
                   ? `#${activeTagFilter} 태그에 해당하는 콘텐츠가 없습니다.`
                   : "아직 저장한 콘텐츠가 없습니다. 오른쪽 입력 폼에서 먼저 추가해 보세요."}
@@ -477,26 +515,26 @@ function DashboardPageContent() {
             {paginatedContents.map((item) => (
               <article
                 key={item.id}
-                className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 hover:border-brand/60"
+                className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4 transition hover:border-[var(--accent)]"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <button
                       type="button"
                       onClick={() => setSelectedContent(item)}
-                      className="text-left text-sm font-semibold text-white hover:text-blue-200"
+                      className="text-left text-sm font-semibold text-[var(--text-primary)] hover:text-[var(--accent-strong)]"
                     >
                       {item.title}
                     </button>
                     <div className="mt-1 flex flex-wrap items-center gap-2">
                       <StatusBadge status={item.status} />
                       {item.is_public && (
-                        <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] text-slate-100">
+                        <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] text-[var(--text-primary)]">
                           공개
                         </span>
                       )}
                       {item.content_type && (
-                        <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-200">
+                        <span className="rounded-full bg-black/10 px-2 py-0.5 text-[11px] text-[var(--text-secondary)]">
                           {item.content_type}
                         </span>
                       )}
@@ -512,7 +550,7 @@ function DashboardPageContent() {
                       href={item.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-[11px] text-blue-300 underline-offset-2 hover:underline"
+                      className="text-[11px] text-[var(--accent-strong)] underline-offset-2 hover:underline"
                     >
                       원문 보기
                     </a>
@@ -522,10 +560,10 @@ function DashboardPageContent() {
                   <button
                     type="button"
                     onClick={() => setSelectedContent(item)}
-                    className="mt-2 block w-full text-left text-xs text-slate-200"
+                    className="mt-2 block w-full text-left text-xs text-[var(--text-secondary)]"
                   >
                     {truncateText(item.summary, SUMMARY_PREVIEW_MAX_LENGTH)}
-                    <span className="ml-1 text-[11px] text-blue-300">전체 보기</span>
+                    <span className="ml-1 text-[11px] text-[var(--accent-strong)]">전체 보기</span>
                   </button>
                 )}
                 {item.status === "failed" && item.processing_error && (
@@ -557,28 +595,19 @@ function DashboardPageContent() {
                           setMessage(err instanceof Error ? err.message : "재처리 요청에 실패했습니다.");
                         }
                       }}
-                      className="whitespace-nowrap rounded-full border border-white/15 px-3 py-1.5 text-[11px] text-slate-100 hover:border-blue-400"
+                      className="whitespace-nowrap rounded-full border border-[var(--border-strong)] px-3 py-1.5 text-[11px] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--text-primary)]"
                     >
                       {item.status === "failed" ? "다시 시도" : "재처리"}
                     </button>
                     <button
                       type="button"
-                      onClick={async () => {
-                        const ok = window.confirm("이 콘텐츠를 삭제하시겠습니까?");
-                        if (!ok) return;
-                        try {
-                          await api.deleteContent(item.id, token);
-                          setContents((prev) => prev.filter((content) => content.id !== item.id));
-                        } catch (err) {
-                          setMessage(err instanceof Error ? err.message : "삭제에 실패했습니다.");
-                        }
-                      }}
+                      onClick={() => setDeleteTarget(item)}
                       className="whitespace-nowrap rounded-full border border-red-500/40 px-3 py-1.5 text-[11px] text-red-200 hover:bg-red-500/10"
                     >
                       삭제
                     </button>
                   </div>
-                  <p className="shrink-0 text-[11px] text-slate-400 sm:text-right">
+                  <p className="shrink-0 text-[11px] text-[var(--text-muted)] sm:text-right">
                     {item.status === "completed" ? "처리 완료" : "최근 업데이트"}{" "}
                     {formatKoreanDateTime(item.updated_at || item.created_at)}
                   </p>
@@ -588,7 +617,7 @@ function DashboardPageContent() {
           </div>
           {filteredContents.length > CONTENTS_PAGE_SIZE && (
             <div className="mt-3 flex items-center justify-between">
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-[var(--text-muted)]">
                 {currentContentsPage} / {totalContentsPages} 페이지
               </p>
               <div className="flex items-center gap-2">
@@ -596,7 +625,7 @@ function DashboardPageContent() {
                   type="button"
                   onClick={() => setCurrentContentsPage((prev) => Math.max(1, prev - 1))}
                   disabled={currentContentsPage === 1}
-                  className="rounded-full border border-white/15 px-3 py-1 text-[11px] text-slate-200 disabled:opacity-40"
+                  className="rounded-full border border-[var(--border-strong)] px-3 py-1 text-[11px] text-[var(--text-secondary)] disabled:opacity-40"
                 >
                   이전
                 </button>
@@ -606,7 +635,7 @@ function DashboardPageContent() {
                     setCurrentContentsPage((prev) => Math.min(totalContentsPages, prev + 1))
                   }
                   disabled={currentContentsPage >= totalContentsPages}
-                  className="rounded-full border border-white/15 px-3 py-1 text-[11px] text-slate-200 disabled:opacity-40"
+                  className="rounded-full border border-[var(--border-strong)] px-3 py-1 text-[11px] text-[var(--text-secondary)] disabled:opacity-40"
                 >
                   다음
                 </button>
@@ -615,21 +644,21 @@ function DashboardPageContent() {
           )}
         </section>
 
-        <section className="space-y-3 rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-card">
+        <section className="surface-card space-y-3 rounded-3xl p-6">
           <div>
-            <h2 className="text-lg font-semibold text-white">콘텐츠 추가</h2>
-            <p className="text-xs text-slate-300">
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">콘텐츠 추가</h2>
+            <p className="text-xs text-[var(--text-secondary)]">
               기사 URL이나 텍스트를 넣으면 백엔드가 요약, 태그, 벡터를 생성합니다.
             </p>
           </div>
           <QuickAddForm token={token} onCreated={() => void loadContents({ resetPage: true })} />
-          <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+          <div className="surface-muted mt-4 rounded-2xl p-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-white">자주 쓰는 태그</h3>
-              <span className="text-[11px] text-slate-400">Top 15</span>
+              <h3 className="text-sm font-semibold text-[var(--text-primary)]">자주 쓰는 태그</h3>
+              <span className="text-[11px] text-[var(--text-muted)]">Top 15</span>
             </div>
             {tagStats.length === 0 ? (
-              <p className="mt-3 text-xs text-slate-400">태그가 있는 콘텐츠를 추가하면 여기 표시됩니다.</p>
+              <p className="mt-3 text-xs text-[var(--text-muted)]">태그가 있는 콘텐츠를 추가하면 여기 표시됩니다.</p>
             ) : (
               <div className="mt-3 flex flex-wrap gap-2">
                 {tagStats.map((item) => {
@@ -645,7 +674,7 @@ function DashboardPageContent() {
                       className={`rounded-full px-2.5 py-1 text-[11px] transition ${
                         active
                           ? "border border-blue-300/50 bg-blue-500/25 text-blue-100"
-                          : "border border-white/15 bg-slate-900/60 text-slate-200 hover:border-white/35"
+                          : "border border-[var(--border-strong)] bg-[var(--surface-muted)] text-[var(--text-secondary)] hover:border-[var(--accent)]"
                       }`}
                       title={`#${item.tag} 콘텐츠 ${item.count}개`}
                     >
@@ -660,7 +689,7 @@ function DashboardPageContent() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <section className="space-y-4 rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-card">
+        <section className="surface-card space-y-4 rounded-3xl p-6">
           <div>
             <h2 className="text-lg font-semibold text-white">의미론적 검색</h2>
             <p className="text-xs text-slate-300">
@@ -757,7 +786,7 @@ function DashboardPageContent() {
           </div>
         </section>
 
-        <section className="space-y-4 rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-card">
+        <section className="surface-card space-y-4 rounded-3xl p-6">
           <div>
             <h2 className="text-lg font-semibold text-white">AI 어시스턴트</h2>
             <p className="text-xs text-slate-300">
@@ -840,34 +869,34 @@ function DashboardPageContent() {
           onClick={() => setSelectedContent(null)}
         >
           <div
-            className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/10 bg-slate-950 p-5 shadow-card"
+            className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-elevated)] p-5 shadow-card"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="w-full">
-                <label className="block text-xs text-slate-300">제목</label>
+                <label className="block text-xs text-[var(--text-secondary)]">제목</label>
                 <div className="mt-1 flex gap-2">
                   <input
                     value={editingTitle}
                     onChange={(e) => setEditingTitle(e.target.value)}
-                    className="w-full rounded-lg border border-white/15 bg-slate-900/70 px-3 py-2 text-sm text-white focus:border-brand focus:outline-none"
+                    className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
                   />
                   <button
                     type="button"
                     onClick={() => void handleSaveTitle()}
                     disabled={savingTitle}
-                    className="whitespace-nowrap rounded-lg border border-blue-300/35 bg-blue-500/20 px-3 py-2 text-xs text-blue-100 disabled:opacity-50"
+                    className="whitespace-nowrap rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)] px-3 py-2 text-xs text-[var(--accent-strong)] disabled:opacity-50"
                   >
                     {savingTitle ? "저장 중..." : "저장"}
                   </button>
                   <button
                     type="button"
                     onClick={() => setSelectedContent(null)}
-                    className="whitespace-nowrap rounded-lg border border-white/15 px-3 py-2 text-xs text-slate-200 hover:border-brand"
+                    className="whitespace-nowrap rounded-lg border border-[var(--border-strong)] px-3 py-2 text-xs text-[var(--text-secondary)] hover:border-[var(--accent)]"
                   >
                     닫기
                   </button>
                 </div>
-                <p className="mt-1 text-xs text-slate-400">
+                <p className="mt-1 text-xs text-[var(--text-muted)]">
                   생성 {new Date(selectedContent.created_at).toLocaleString()}
                 </p>
             </div>
@@ -888,8 +917,8 @@ function DashboardPageContent() {
             </div>
 
             <div className="mt-4 space-y-2">
-              <p className="text-xs font-semibold text-slate-300">요약 전체</p>
-              <p className="whitespace-pre-wrap text-sm leading-6 text-slate-100">
+              <p className="text-xs font-semibold text-[var(--text-secondary)]">요약 전체</p>
+              <p className="whitespace-pre-wrap text-sm leading-6 text-[var(--text-primary)]">
                 {selectedContent.summary || "요약이 아직 생성되지 않았습니다."}
               </p>
             </div>
@@ -903,7 +932,7 @@ function DashboardPageContent() {
 
             {selectedContent.tags && selectedContent.tags.length > 0 && (
               <div className="mt-4">
-                <p className="mb-2 text-xs font-semibold text-slate-300">태그</p>
+                <p className="mb-2 text-xs font-semibold text-[var(--text-secondary)]">태그</p>
                 <div className="flex flex-wrap gap-1.5">
                   {selectedContent.tags.map((tag) => (
                     <span key={tag} className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-200">
@@ -919,7 +948,7 @@ function DashboardPageContent() {
                 href={selectedContent.url}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-5 inline-block text-xs text-blue-300 underline-offset-2 hover:underline"
+                className="mt-5 inline-block text-xs text-[var(--accent-strong)] underline-offset-2 hover:underline"
               >
                 원문 보기
               </a>
@@ -927,6 +956,23 @@ function DashboardPageContent() {
           </div>
         </div>
       )}
+
+      <ConfirmationDialog
+        open={Boolean(deleteTarget)}
+        title="콘텐츠를 삭제할까요?"
+        description={
+          deleteTarget
+            ? `${displayTitle(deleteTarget.title, deleteTarget.id)} 항목을 삭제하면 되돌릴 수 없습니다.`
+            : ""
+        }
+        confirmLabel="삭제"
+        tone="danger"
+        busy={deletePending}
+        onCancel={() => {
+          if (!deletePending) setDeleteTarget(null);
+        }}
+        onConfirm={handleDeleteContent}
+      />
 
       {toasts.length > 0 && (
         <div className="pointer-events-none fixed inset-x-0 top-24 z-[70] mx-auto flex w-full max-w-6xl justify-end px-6 sm:px-10">

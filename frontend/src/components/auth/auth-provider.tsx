@@ -32,6 +32,13 @@ const EMAIL_KEY = "smartcurator_email";
 const EXPIRY_WARNING_SECONDS = 5 * 60;
 const AUTO_REFRESH_THRESHOLD_SECONDS = 2 * 60;
 
+function clearStoredAuth() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(TOKEN_KEY);
+  window.localStorage.removeItem(REFRESH_TOKEN_KEY);
+  window.localStorage.removeItem(EMAIL_KEY);
+}
+
 function decodeJwtExp(token: string): number | null {
   try {
     const parts = token.split(".");
@@ -59,9 +66,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const storedToken = window.localStorage.getItem(TOKEN_KEY);
       const storedRefreshToken = window.localStorage.getItem(REFRESH_TOKEN_KEY);
       const storedEmail = window.localStorage.getItem(EMAIL_KEY);
-      if (storedToken) setToken(storedToken);
-      if (storedRefreshToken) setRefreshToken(storedRefreshToken);
-      if (storedEmail) setUserEmail(storedEmail);
+      const now = Math.floor(Date.now() / 1000);
+      const tokenExpiry = storedToken ? decodeJwtExp(storedToken) : null;
+      const hasValidAccessToken = Boolean(storedToken && tokenExpiry && tokenExpiry > now);
+
+      if (hasValidAccessToken && storedToken) {
+        setToken(storedToken);
+      }
+
+      if (storedRefreshToken) {
+        setRefreshToken(storedRefreshToken);
+      }
+
+      if (storedEmail && (hasValidAccessToken || storedRefreshToken)) {
+        setUserEmail(storedEmail);
+      }
+
+      if (storedToken && !hasValidAccessToken && !storedRefreshToken) {
+        clearStoredAuth();
+      }
     } finally {
       setInitialized(true);
     }
@@ -104,11 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     setRefreshToken(null);
     setUserEmail(null);
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem(TOKEN_KEY);
-      window.localStorage.removeItem(REFRESH_TOKEN_KEY);
-      window.localStorage.removeItem(EMAIL_KEY);
-    }
+    clearStoredAuth();
   }, []);
 
   const performRefresh = useCallback(async () => {
@@ -139,8 +158,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!initialized || !token || !refreshToken) return;
     const exp = decodeJwtExp(token);
-    if (!exp) return;
+    if (!exp) {
+      setToken(null);
+      return;
+    }
     const secondsLeft = exp - nowSeconds;
+    if (secondsLeft <= 0) {
+      setToken(null);
+      return;
+    }
     if (secondsLeft > 0 && secondsLeft <= AUTO_REFRESH_THRESHOLD_SECONDS) {
       void performRefresh();
     }

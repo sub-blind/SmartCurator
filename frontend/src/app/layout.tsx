@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { TopNav } from "@/components/layout/top-nav";
 import { AuthProvider } from "@/components/auth/auth-provider";
+import { ThemeProvider } from "@/components/theme/theme-provider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -14,15 +15,17 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ko">
-      <body className={`${inter.className} bg-slate-950 text-slate-100`}>
+    <html lang="ko" suppressHydrationWarning>
+      <body className={`${inter.className} app-body`}>
         <div className="gradient-ring fixed inset-0 -z-10 opacity-40" aria-hidden="true" />
-        <AuthProvider>
-          <div className="relative min-h-screen">
-            <TopNav />
-            <main className="mx-auto w-full max-w-6xl px-6 pb-16 pt-28 text-[15px] sm:px-10 sm:text-base">{children}</main>
-          </div>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <div className="relative min-h-screen">
+              <TopNav />
+              <main className="mx-auto w-full max-w-6xl px-6 pb-16 pt-28 text-[15px] sm:px-10 sm:text-base">{children}</main>
+            </div>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
