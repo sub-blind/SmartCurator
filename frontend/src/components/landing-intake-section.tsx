@@ -49,6 +49,51 @@ const SOURCE_OPTIONS: SourceOption[] = [
   },
 ];
 
+/** 가져오기 전 오른쪽 패널: 탭별 안내·예시 입력 */
+const SOURCE_EMPTY_PANEL: Record<
+  SourceKind,
+  {
+    headline: string;
+    tip: string;
+    examples: { label: string; value: string }[];
+  }
+> = {
+  youtube: {
+    headline: "자막이 있으면 그걸로 요약해요",
+    tip: "자동 생성·한국어 자막이 붙은 영상이 가장 안정적이에요. 너무 짧은 클립은 본문이 부족할 수 있어요.",
+    examples: [
+      { label: "예시 링크 넣기", value: "https://www.youtube.com/watch?v=jNQXAC9IVRw" },
+      { label: "짧은 주소(youtu.be)", value: "https://youtu.be/jNQXAC9IVRw" },
+    ],
+  },
+  website: {
+    headline: "기사·글 본문을 긁어 옵니다",
+    tip: "랭킹·목록 페이지보다는 글 한 편 URL이 좋아요. 막혀 있으면 본문을 복사해서 메모 탭에 붙여 넣을 수도 있어요.",
+    examples: [
+      {
+        label: "위키 본문 예시",
+        value: "https://ko.wikipedia.org/wiki/%EC%9C%84%ED%82%A4%EB%B0%B1%EA%B3%BC",
+      },
+    ],
+  },
+  pdf: {
+    headline: "이 화면에서 PDF를 바로 올릴 수 있어요",
+    tip: "왼쪽에서 파일을 고른 뒤 가져오기를 누르면 요약·태그 파이프라인이 돌아가요. 여러 파일은 대시보드가 편해요.",
+    examples: [],
+  },
+  note: {
+    headline: "메모는 제목 없이도 괜찮아요",
+    tip: "첫 줄이 짧으면 제목으로 쓰이고, 나머지는 본문으로 저장돼요. 회의·강의 메모를 통째로 붙여도 됩니다.",
+    examples: [
+      {
+        label: "짧은 메모 예시 넣기",
+        value:
+          "오늘 정리: RAG는 검색된 근거만 모델에 넣는 방식이다. 환각을 줄이려면 출처 스니펫을 같이 보여 주는 게 좋다.",
+      },
+    ],
+  },
+};
+
 const LANDING_POLL_MAX_ATTEMPTS = 90;
 const LANDING_POLL_INTERVAL_MS = 2500;
 
@@ -120,13 +165,14 @@ function formatDate(value?: string | null) {
 
 export function LandingIntakeSection() {
   const router = useRouter();
-  const { token } = useAuth();
+  const { token, initialized } = useAuth();
   const [activeSource, setActiveSource] = useState<SourceKind>("youtube");
   const [draftValue, setDraftValue] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [previewContent, setPreviewContent] = useState<ContentItem | null>(null);
+  const [loginModalOpen, setLoginModalOpen] = useState(false);
   const pollTimeoutRef = useRef<number | null>(null);
 
   const activeOption = useMemo(
@@ -146,6 +192,22 @@ export function LandingIntakeSection() {
   }, []);
 
   useEffect(() => {
+    if (!loginModalOpen || typeof window === "undefined") return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setLoginModalOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [loginModalOpen]);
+
+  useEffect(() => {
     setMessage(null);
     if (activeSource !== "pdf") {
       setSelectedFile(null);
@@ -158,10 +220,16 @@ export function LandingIntakeSection() {
       setPreviewContent(latest);
 
       const stillWorking = latest.status === "pending" || latest.status === "processing";
-      if (attempt < LANDING_POLL_MAX_ATTEMPTS && stillWorking) {
+      const shouldContinue = attempt < LANDING_POLL_MAX_ATTEMPTS && stillWorking;
+
+      if (shouldContinue) {
         pollTimeoutRef.current = window.setTimeout(() => {
           void pollContent(contentId, authToken, attempt + 1);
         }, LANDING_POLL_INTERVAL_MS);
+      } else if (stillWorking && attempt >= LANDING_POLL_MAX_ATTEMPTS) {
+        setMessage(
+          "여기서는 더 갱신하지 않아요. 잠시 후 대시보드에서 같은 항목을 확인해 보세요. 오래 걸리면 백그라운드 워커가 돌고 있는지도 확인해 주세요.",
+        );
       }
     } catch {
       // Keep initial preview even if polling fails.
@@ -172,7 +240,7 @@ export function LandingIntakeSection() {
     clearPoll();
 
     if (!token) {
-      setMessage("로그인 후 이용해 주세요.");
+      if (initialized) setLoginModalOpen(true);
       return;
     }
 
@@ -230,6 +298,7 @@ export function LandingIntakeSection() {
   };
 
   return (
+    <>
     <section className="surface-card overflow-hidden rounded-[2rem] p-6 sm:p-8 lg:p-10">
       <div className="grid gap-8 lg:grid-cols-[minmax(0,0.98fr)_minmax(360px,0.82fr)] lg:items-start">
         <div className="space-y-6">
@@ -345,31 +414,6 @@ export function LandingIntakeSection() {
             )}
 
             {message && <p className="mt-4 text-sm text-[var(--text-secondary)]">{message}</p>}
-
-            {!token && (
-              <div className="mt-5 flex justify-center">
-                <div className="w-full max-w-md rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-elevated)] px-5 py-5 text-center shadow-sm">
-                  <p className="text-base font-semibold text-[var(--text-primary)]">로그인 후 이용해 주세요.</p>
-                  <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
-                    저장과 요약은 로그인 후 바로 사용할 수 있습니다.
-                  </p>
-                  <div className="mt-4 flex flex-wrap justify-center gap-3">
-                    <Link
-                      href="/login"
-                      className="rounded-full bg-[var(--text-primary)] px-5 py-2 text-sm font-semibold text-slate-950 transition hover:opacity-90"
-                    >
-                      로그인
-                    </Link>
-                    <Link
-                      href="/register"
-                      className="rounded-full border border-[var(--border-strong)] px-5 py-2 text-sm font-semibold text-[var(--text-primary)] transition hover:border-[var(--accent)]"
-                    >
-                      회원가입
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
@@ -449,17 +493,124 @@ export function LandingIntakeSection() {
               </div>
             </article>
           ) : (
-            <div className="flex min-h-[420px] items-center justify-center rounded-[1.75rem] border border-dashed border-[var(--border)] bg-[var(--surface-elevated)] p-8 text-center">
-              <div className="space-y-3">
-                <p className="text-base font-medium text-[var(--text-primary)]">가져온 자료가 여기 표시됩니다</p>
-                <p className="text-sm leading-7 text-[var(--text-secondary)]">
-                  링크, PDF, 메모/본문을 입력하고 가져오기를 누르면 저장 결과 카드가 바로 나타납니다.
+            <div className="flex min-h-[420px] flex-col rounded-[1.75rem] border border-dashed border-[var(--border)] bg-[var(--surface-elevated)] p-6 sm:min-h-[460px] sm:p-8">
+              <div className="flex flex-1 flex-col gap-5">
+                <div className="text-left">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                    지금 · {activeOption.label}
+                  </p>
+                  <h3 className="mt-2 text-lg font-semibold leading-snug text-[var(--text-primary)] sm:text-xl">
+                    {SOURCE_EMPTY_PANEL[activeSource].headline}
+                  </h3>
+                  <p className="mt-2 text-sm leading-7 text-[var(--text-secondary)]">
+                    {SOURCE_EMPTY_PANEL[activeSource].tip}
+                  </p>
+                </div>
+
+                {SOURCE_EMPTY_PANEL[activeSource].examples.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {SOURCE_EMPTY_PANEL[activeSource].examples.map((ex) => (
+                      <button
+                        key={ex.label}
+                        type="button"
+                        onClick={() => {
+                          setDraftValue(ex.value);
+                          setMessage(null);
+                        }}
+                        className="rounded-full border border-[var(--border-strong)] bg-[var(--surface-muted)] px-3 py-1.5 text-left text-xs font-medium text-[var(--text-primary)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)]"
+                      >
+                        {ex.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    <Link
+                      href="/dashboard"
+                      className="inline-flex items-center rounded-full border border-[var(--border-strong)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition hover:border-[var(--accent)]"
+                    >
+                      대시보드에서 여러 파일 / 고급 옵션 →
+                    </Link>
+                  </div>
+                )}
+
+                <p className="text-xs text-[var(--text-muted)]">
+                  왼쪽에서 입력 후 <span className="text-[var(--text-secondary)]">가져오기</span>를 누르면 이 영역이 실제 카드로 바뀝니다.
                 </p>
+
+                <div className="mt-auto border-t border-[var(--border)] pt-5">
+                  <p className="mb-3 text-xs font-medium text-[var(--text-muted)]">처리가 끝나면 이런 카드가 됩니다</p>
+                  <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)]">
+                    <div className="h-[5.5rem] bg-gradient-to-br from-slate-500/25 via-slate-400/15 to-transparent" />
+                    <div className="space-y-2.5 p-4">
+                      <div className="h-2.5 max-w-[55%] rounded bg-[var(--border-strong)]" />
+                      <div className="h-2 w-full rounded bg-[var(--border)]" />
+                      <div className="h-2 w-[88%] rounded bg-[var(--border)]" />
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        <span className="h-6 w-14 rounded-full bg-[var(--border-strong)]/70" />
+                        <span className="h-6 w-11 rounded-full bg-[var(--border)]" />
+                        <span className="h-6 w-20 rounded-full bg-[var(--border)]" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
         </div>
       </div>
     </section>
+
+      {loginModalOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="landing-login-required-title"
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 px-4 py-6 backdrop-blur-sm"
+          onClick={() => setLoginModalOpen(false)}
+        >
+          <div
+            className="relative w-full max-w-md rounded-3xl border border-[var(--border-strong)] bg-[var(--surface-elevated)] p-6 shadow-[0_24px_80px_rgba(15,23,42,0.28)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <p className="min-w-0 pt-0.5 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                알림
+              </p>
+              <button
+                type="button"
+                aria-label="닫기"
+                onClick={() => setLoginModalOpen(false)}
+                className="-mr-1 -mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
+              >
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                  <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+            <h2 id="landing-login-required-title" className="mt-3 text-xl font-semibold text-[var(--text-primary)]">
+              로그인이 필요합니다
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+              이 서비스를 이용하려면 로그인해 주세요. 저장과 요약은 로그인 후 바로 사용할 수 있습니다.
+            </p>
+            <div className="mt-8 grid w-full grid-cols-2 gap-3">
+              <Link
+                href="/register"
+                className="inline-flex min-h-[44px] w-full min-w-0 items-center justify-center rounded-full border border-[var(--border-strong)] px-3 py-2.5 text-center text-sm font-semibold text-[var(--text-primary)] transition hover:border-[var(--accent)]"
+              >
+                회원가입
+              </Link>
+              <Link
+                href="/login"
+                className="inline-flex min-h-[44px] w-full min-w-0 items-center justify-center rounded-full bg-[var(--text-primary)] px-3 py-2.5 text-center text-sm font-semibold text-slate-950 transition hover:opacity-90"
+              >
+                로그인
+              </Link>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
