@@ -18,48 +18,6 @@ type SourceOption = {
   contentType: ContentType;
 };
 
-/** 가져오기 전 오른쪽 패널: 탭별 안내·예시 (실제 동작하는 링크 위주) */
-const SOURCE_EMPTY_PANEL: Record<
-  SourceKind,
-  {
-    headline: string;
-    tip: string;
-    examples: { label: string; value: string }[];
-  }
-> = {
-  youtube: {
-    headline: "자막이 있으면 그걸로 요약해요",
-    tip: "자동 생성·한국어 자막이 붙은 영상이 가장 안정적이에요. 너무 짧은 클립은 본문이 부족할 수 있어요.",
-    examples: [
-      { label: "예시 링크 넣기", value: "https://www.youtube.com/watch?v=jNQXAC9IVRw" },
-      { label: "짧은 주소(youtu.be)", value: "https://youtu.be/jNQXAC9IVRw" },
-    ],
-  },
-  website: {
-    headline: "기사·글 본문을 긁어 옵니다",
-    tip: "랭킹·목록 페이지보다는 글 한 편 URL이 좋아요. 막혀 있으면 본문을 복사해서 메모 탭에 붙여 넣을 수도 있어요.",
-    examples: [
-      { label: "위키 본문 예시", value: "https://ko.wikipedia.org/wiki/위키백과" },
-    ],
-  },
-  pdf: {
-    headline: "PDF는 대시보드에서 파일로 올려요",
-    tip: "여기서는 링크·메모만 바로 넣을 수 있어요. PDF/TXT/MD는 대시보드 오른쪽 업로드 칸을 쓰면 같은 파이프라인으로 요약돼요.",
-    examples: [],
-  },
-  note: {
-    headline: "메모는 제목 없이도 괜찮아요",
-    tip: "첫 줄이 짧으면 제목으로 쓰이고, 나머지는 본문으로 저장돼요. 회의나 강의 메모를 통째로 붙여도 됩니다.",
-    examples: [
-      {
-        label: "짧은 메모 예시 넣기",
-        value:
-          "오늘 정리: RAG는 검색된 근거만 모델에 넣는 방식이다. 환각을 줄이려면 출처 스니펫을 같이 보여 주는 게 좋다.",
-      },
-    ],
-  },
-};
-
 const SOURCE_OPTIONS: SourceOption[] = [
   {
     id: "youtube",
@@ -78,8 +36,8 @@ const SOURCE_OPTIONS: SourceOption[] = [
   {
     id: "pdf",
     label: "PDF",
-    hint: "PDF는 대시보드에서 파일 업로드로 추가할 수 있습니다.",
-    placeholder: "PDF는 대시보드에서 업로드해 주세요.",
+    hint: "PDF 파일을 바로 업로드해서 요약과 태그를 생성합니다.",
+    placeholder: "",
     contentType: "pdf",
   },
   {
@@ -91,7 +49,14 @@ const SOURCE_OPTIONS: SourceOption[] = [
   },
 ];
 
-function makeAutoTitle(sourceKind: SourceKind, draftValue: string) {
+const LANDING_POLL_MAX_ATTEMPTS = 90;
+const LANDING_POLL_INTERVAL_MS = 2500;
+
+function makeAutoTitle(sourceKind: SourceKind, draftValue: string, fileName?: string | null) {
+  if (sourceKind === "pdf" && fileName) {
+    return fileName.replace(/\.[^.]+$/, "").trim() || "PDF 문서";
+  }
+
   if (sourceKind === "youtube" || sourceKind === "website") {
     return "자동 생성 제목";
   }
@@ -153,15 +118,12 @@ function formatDate(value?: string | null) {
   });
 }
 
-/** 유튜브·다중 chunk 요약은 OpenAI·Celery 때문에 1분 이상 걸릴 수 있음 */
-const LANDING_POLL_MAX_ATTEMPTS = 90;
-const LANDING_POLL_INTERVAL_MS = 2500;
-
 export function LandingIntakeSection() {
   const router = useRouter();
   const { token } = useAuth();
   const [activeSource, setActiveSource] = useState<SourceKind>("youtube");
   const [draftValue, setDraftValue] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [previewContent, setPreviewContent] = useState<ContentItem | null>(null);
@@ -180,13 +142,15 @@ export function LandingIntakeSection() {
   };
 
   useEffect(() => {
-    return () => {
-      if (pollTimeoutRef.current) {
-        window.clearTimeout(pollTimeoutRef.current);
-        pollTimeoutRef.current = null;
-      }
-    };
+    return () => clearPoll();
   }, []);
+
+  useEffect(() => {
+    setMessage(null);
+    if (activeSource !== "pdf") {
+      setSelectedFile(null);
+    }
+  }, [activeSource]);
 
   const pollContent = async (contentId: number, authToken: string, attempt = 0) => {
     try {
@@ -194,19 +158,13 @@ export function LandingIntakeSection() {
       setPreviewContent(latest);
 
       const stillWorking = latest.status === "pending" || latest.status === "processing";
-      const shouldContinue = attempt < LANDING_POLL_MAX_ATTEMPTS && stillWorking;
-
-      if (shouldContinue) {
+      if (attempt < LANDING_POLL_MAX_ATTEMPTS && stillWorking) {
         pollTimeoutRef.current = window.setTimeout(() => {
           void pollContent(contentId, authToken, attempt + 1);
         }, LANDING_POLL_INTERVAL_MS);
-      } else if (stillWorking && attempt >= LANDING_POLL_MAX_ATTEMPTS) {
-        setMessage(
-          "여기 새로고침으로는 더 안 바뀔 수 있어요. 잠시 후 대시보드에서 같은 글을 열어 보시거나, 백그라운드 작업(워커)이 돌고 있는지 확인해 주세요.",
-        );
       }
     } catch {
-      // Keep the initial preview card even if polling fails.
+      // Keep initial preview even if polling fails.
     }
   };
 
@@ -218,14 +176,14 @@ export function LandingIntakeSection() {
       return;
     }
 
-    const trimmed = draftValue.trim();
-    if (!trimmed) {
-      setMessage(activeSource === "note" ? "메모나 본문을 입력해 주세요." : "링크를 입력해 주세요.");
+    if (activeSource === "pdf" && !selectedFile) {
+      setMessage("PDF 파일을 먼저 선택해 주세요.");
       return;
     }
 
-    if (activeSource === "pdf") {
-      setMessage("PDF는 대시보드에서 업로드해 주세요.");
+    const trimmed = draftValue.trim();
+    if (activeSource !== "pdf" && !trimmed) {
+      setMessage(activeSource === "note" ? "메모나 본문을 입력해 주세요." : "링크를 입력해 주세요.");
       return;
     }
 
@@ -233,24 +191,36 @@ export function LandingIntakeSection() {
     setMessage(null);
 
     try {
-      const title = makeAutoTitle(activeSource, trimmed);
-      const thumbnailUrl = activeSource === "youtube" ? buildYouTubeThumbnail(trimmed) : undefined;
+      let created: ContentItem;
 
-      const created = await api.quickAddContent({
-        title,
-        url: activeOption.contentType === "url" ? trimmed : undefined,
-        raw_content: activeOption.contentType === "text" ? trimmed : undefined,
-        thumbnail_url: thumbnailUrl,
-        content_type: activeOption.contentType,
-        is_public: true,
-        token,
-      });
+      if (activeSource === "pdf" && selectedFile) {
+        created = await api.uploadContentFile({
+          file: selectedFile,
+          title: makeAutoTitle("pdf", "", selectedFile.name),
+          is_public: true,
+          token,
+        });
+      } else {
+        const thumbnailUrl = activeSource === "youtube" ? buildYouTubeThumbnail(trimmed) : undefined;
+        created = await api.quickAddContent({
+          title: makeAutoTitle(activeSource, trimmed),
+          url: activeOption.contentType === "url" ? trimmed : undefined,
+          raw_content: activeOption.contentType === "text" ? trimmed : undefined,
+          thumbnail_url: thumbnailUrl,
+          content_type: activeOption.contentType,
+          is_public: true,
+          token,
+        });
+        created = {
+          ...created,
+          thumbnail_url: created.thumbnail_url ?? thumbnailUrl ?? null,
+        };
+      }
 
-      setPreviewContent({
-        ...created,
-        thumbnail_url: created.thumbnail_url ?? thumbnailUrl ?? null,
-      });
+      setPreviewContent(created);
       setMessage("가져오는 중입니다. 처리되면 카드가 업데이트됩니다.");
+      setDraftValue("");
+      setSelectedFile(null);
       void pollContent(created.id, token);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "가져오기에 실패했습니다.");
@@ -277,21 +247,21 @@ export function LandingIntakeSection() {
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                   <span className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-[var(--surface-elevated)] px-3 py-1 text-[11px] font-medium text-[var(--text-secondary)] shadow-sm">
                     <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--accent)]" aria-hidden />
-                    저장되면 바로 요약 파이프라인 시작
+                    넣는 즉시 요약 파이프라인 시작
                   </span>
                 </div>
                 <h1 className="max-w-xl text-[1.7rem] font-semibold leading-[1.22] tracking-tight text-[var(--text-primary)] sm:text-4xl sm:leading-[1.18] lg:text-[2.35rem]">
                   <span className="block font-medium text-[var(--text-muted)] sm:text-[var(--text-secondary)]">
-                    붙여 넣기 한 번이면,
+                    붙여 넣기 한 번이면
                   </span>
                   <span className="mt-1.5 block text-[var(--text-primary)] sm:mt-2">
-                    <span className="text-[var(--accent-strong)]">요약·태그·검색</span>
-                    <span className="text-[var(--text-primary)]">까지 이어집니다</span>
+                    <span className="text-[var(--accent-strong)]">요약, 태그, 검색</span>
+                    <span className="text-[var(--text-primary)]">까지 이어집니다.</span>
                   </span>
                 </h1>
                 <p className="max-w-lg text-[15px] leading-7 text-[var(--text-secondary)] sm:text-base sm:leading-8">
-                  유튜브는 자막을, 웹 링크는 본문을 읽어 옵니다. 메모는 그대로 저장해요. 처리는 뒤에서 조용히 돌고,
-                  <span className="text-[var(--text-primary)]"> 오른쪽 카드</span>에서 완료 여부·요약을 확인하면 됩니다.
+                  유튜브는 자막을, 링크는 본문을 읽어 옵니다. 메모는 그대로 저장해 두고,
+                  <span className="text-[var(--text-primary)]"> 오른쪽 카드</span>에서 완료 여부와 요약을 바로 확인하면 됩니다.
                 </p>
               </div>
             </div>
@@ -304,10 +274,7 @@ export function LandingIntakeSection() {
                 <button
                   key={option.id}
                   type="button"
-                  onClick={() => {
-                    setActiveSource(option.id);
-                    setMessage(null);
-                  }}
+                  onClick={() => setActiveSource(option.id)}
                   className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
                     active
                       ? "border-[var(--accent)] bg-[var(--text-primary)] text-slate-950"
@@ -326,9 +293,6 @@ export function LandingIntakeSection() {
                 <h2 className="text-2xl font-semibold text-[var(--text-primary)]">{activeOption.label}</h2>
                 <p className="mt-1 text-sm text-[var(--text-secondary)]">{activeOption.hint}</p>
               </div>
-              <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1 text-xs font-medium text-[var(--accent-strong)]">
-                바로 가져오기
-              </span>
             </div>
 
             <div className="mt-5 flex flex-col gap-3 sm:flex-row">
@@ -340,6 +304,21 @@ export function LandingIntakeSection() {
                   rows={4}
                   className="min-h-[132px] flex-1 rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-elevated)] px-5 py-4 text-base text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none"
                 />
+              ) : activeSource === "pdf" ? (
+                <div className="flex flex-1 flex-col gap-3 rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-elevated)] px-4 py-4 sm:flex-row sm:items-center">
+                  <label className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-[var(--border-strong)] bg-[var(--surface-muted)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition hover:border-[var(--accent)]">
+                    <input
+                      type="file"
+                      accept=".pdf,text/plain,application/pdf"
+                      onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+                      className="hidden"
+                    />
+                    파일 첨부
+                  </label>
+                  <span className={`min-w-0 text-sm ${selectedFile ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]"}`}>
+                    {selectedFile ? selectedFile.name : "선택된 파일 없음"}
+                  </span>
+                </div>
               ) : (
                 <input
                   value={draftValue}
@@ -359,17 +338,36 @@ export function LandingIntakeSection() {
               </button>
             </div>
 
+            {activeSource === "pdf" && (
+              <p className="mt-3 text-sm text-[var(--text-secondary)]">
+                PDF는 선택한 파일명을 기준으로 제목을 만들고 내용을 읽어 요약을 생성합니다.
+              </p>
+            )}
+
             {message && <p className="mt-4 text-sm text-[var(--text-secondary)]">{message}</p>}
 
             {!token && (
-              <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-[var(--text-secondary)]">
-                <span>저장과 요약은 로그인 후 바로 사용할 수 있어요.</span>
-                <Link href="/login" className="font-medium text-[var(--accent-strong)] hover:underline">
-                  로그인
-                </Link>
-                <Link href="/register" className="font-medium text-[var(--accent-strong)] hover:underline">
-                  회원가입
-                </Link>
+              <div className="mt-5 flex justify-center">
+                <div className="w-full max-w-md rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-elevated)] px-5 py-5 text-center shadow-sm">
+                  <p className="text-base font-semibold text-[var(--text-primary)]">로그인 후 이용해 주세요.</p>
+                  <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+                    저장과 요약은 로그인 후 바로 사용할 수 있습니다.
+                  </p>
+                  <div className="mt-4 flex flex-wrap justify-center gap-3">
+                    <Link
+                      href="/login"
+                      className="rounded-full bg-[var(--text-primary)] px-5 py-2 text-sm font-semibold text-slate-950 transition hover:opacity-90"
+                    >
+                      로그인
+                    </Link>
+                    <Link
+                      href="/register"
+                      className="rounded-full border border-[var(--border-strong)] px-5 py-2 text-sm font-semibold text-[var(--text-primary)] transition hover:border-[var(--accent)]"
+                    >
+                      회원가입
+                    </Link>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -451,65 +449,12 @@ export function LandingIntakeSection() {
               </div>
             </article>
           ) : (
-            <div className="flex min-h-[420px] flex-col rounded-[1.75rem] border border-dashed border-[var(--border)] bg-[var(--surface-elevated)] p-6 sm:min-h-[460px] sm:p-8">
-              <div className="flex flex-1 flex-col gap-5">
-                <div className="text-left">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                    지금 · {activeOption.label}
-                  </p>
-                  <h3 className="mt-2 text-lg font-semibold leading-snug text-[var(--text-primary)] sm:text-xl">
-                    {SOURCE_EMPTY_PANEL[activeSource].headline}
-                  </h3>
-                  <p className="mt-2 text-sm leading-7 text-[var(--text-secondary)]">
-                    {SOURCE_EMPTY_PANEL[activeSource].tip}
-                  </p>
-                </div>
-
-                {SOURCE_EMPTY_PANEL[activeSource].examples.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {SOURCE_EMPTY_PANEL[activeSource].examples.map((ex) => (
-                      <button
-                        key={ex.label}
-                        type="button"
-                        onClick={() => {
-                          setDraftValue(ex.value);
-                          setMessage(null);
-                        }}
-                        className="rounded-full border border-[var(--border-strong)] bg-[var(--surface-muted)] px-3 py-1.5 text-left text-xs font-medium text-[var(--text-primary)] transition hover:border-[var(--accent)] hover:text-[var(--accent-strong)]"
-                      >
-                        {ex.label}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <Link
-                    href="/dashboard"
-                    className="inline-flex w-fit items-center rounded-full border border-[var(--border-strong)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition hover:border-[var(--accent)]"
-                  >
-                    대시보드에서 PDF 올리기 →
-                  </Link>
-                )}
-
-                <p className="text-xs text-[var(--text-muted)]">
-                  왼쪽에 값을 넣고 <span className="text-[var(--text-secondary)]">가져오기</span>를 누르면 이 영역이 실제 카드로 바뀝니다.
+            <div className="flex min-h-[420px] items-center justify-center rounded-[1.75rem] border border-dashed border-[var(--border)] bg-[var(--surface-elevated)] p-8 text-center">
+              <div className="space-y-3">
+                <p className="text-base font-medium text-[var(--text-primary)]">가져온 자료가 여기 표시됩니다</p>
+                <p className="text-sm leading-7 text-[var(--text-secondary)]">
+                  링크, PDF, 메모/본문을 입력하고 가져오기를 누르면 저장 결과 카드가 바로 나타납니다.
                 </p>
-
-                <div className="mt-auto border-t border-[var(--border)] pt-5">
-                  <p className="mb-3 text-xs font-medium text-[var(--text-muted)]">처리가 끝나면 이런 카드가 됩니다</p>
-                  <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)]">
-                    <div className="h-[5.5rem] bg-gradient-to-br from-slate-500/25 via-slate-400/15 to-transparent" />
-                    <div className="space-y-2.5 p-4">
-                      <div className="h-2.5 max-w-[55%] rounded bg-[var(--border-strong)]" />
-                      <div className="h-2 w-full rounded bg-[var(--border)]" />
-                      <div className="h-2 w-[88%] rounded bg-[var(--border)]" />
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        <span className="h-6 w-14 rounded-full bg-[var(--border-strong)]/70" />
-                        <span className="h-6 w-11 rounded-full bg-[var(--border)]" />
-                        <span className="h-6 w-20 rounded-full bg-[var(--border)]" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
           )}
