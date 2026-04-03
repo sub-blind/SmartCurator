@@ -212,8 +212,8 @@ export function QuickAddForm({
               onClick={() => setSourceKind(option.id)}
               className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
                 active
-                  ? "border-[var(--accent)] bg-[var(--text-primary)] text-slate-950"
-                  : "border-[var(--border-strong)] bg-[var(--surface-elevated)] text-[var(--text-primary)] hover:border-[var(--accent)]"
+                  ? "border-[var(--accent)] bg-[var(--accent)] text-white shadow-sm shadow-[var(--accent)]/20"
+                  : "border-[var(--border-strong)] bg-[var(--surface-elevated)] text-[var(--text-primary)] hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]"
               }`}
             >
               {option.label}
@@ -287,7 +287,7 @@ export function QuickAddForm({
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-2xl bg-[var(--text-primary)] px-3 py-3 text-sm font-semibold text-slate-950 transition hover:opacity-90 disabled:opacity-50"
+        className="w-full rounded-2xl bg-[var(--accent)] px-3 py-3 text-sm font-semibold text-white shadow-md shadow-[var(--accent)]/25 transition hover:brightness-110 disabled:opacity-50"
       >
         {loading ? "등록 중..." : `${activeSource.label} 가져오기`}
       </button>

@@ -17,6 +17,37 @@
   --accent: #2563eb;
   --accent-soft: rgba(37, 99, 235, 0.14);
   --accent-strong: #bfdbfe;
+  /* 보조 톤: 카드·구분선에만 소량 사용 (단조로움 완화) */
+  --tone-sky: rgba(56, 189, 248, 0.22);
+  --tone-amber: rgba(251, 191, 36, 0.2);
+  --tone-violet: rgba(167, 139, 250, 0.22);
+  /* 상태 배지·토스트: 다크에서는 밝은 글자, 라이트에서는 짙은 글자 */
+  --status-success-bg: rgba(16, 185, 129, 0.22);
+  --status-success-fg: #a7f3d0;
+  --status-success-border: rgba(16, 185, 129, 0.45);
+  --status-danger-bg: rgba(239, 68, 68, 0.2);
+  --status-danger-fg: #fecaca;
+  --status-danger-border: rgba(248, 113, 113, 0.45);
+  /* 대시보드 카드: 공개·유형·태그·유튜브 칩, 처리 큐, 재처리 버튼 */
+  --chip-public-bg: rgba(14, 165, 233, 0.18);
+  --chip-public-fg: #e0f2fe;
+  --chip-public-border: rgba(56, 189, 248, 0.4);
+  --chip-type-bg: rgba(167, 139, 250, 0.18);
+  --chip-type-fg: #f3e8ff;
+  --chip-type-border: rgba(167, 139, 250, 0.38);
+  --tag-chip-bg: rgba(37, 99, 235, 0.2);
+  --tag-chip-fg: #bfdbfe;
+  --tag-chip-border: rgba(96, 165, 250, 0.4);
+  --chip-youtube-bg: rgba(239, 68, 68, 0.22);
+  --chip-youtube-fg: #fecaca;
+  --chip-youtube-border: rgba(248, 113, 113, 0.42);
+  --queue-banner-bg: rgba(14, 165, 233, 0.14);
+  --queue-banner-border: rgba(56, 189, 248, 0.32);
+  --queue-banner-title: #e0f2fe;
+  --queue-banner-sub: #bae6fd;
+  --btn-secondary-bg: rgba(37, 99, 235, 0.16);
+  --btn-secondary-fg: #bfdbfe;
+  --btn-secondary-border: rgba(96, 165, 250, 0.5);
   background-color: var(--bg);
 }
 
@@ -35,6 +66,34 @@ html[data-theme="light"] {
   --accent: #2563eb;
   --accent-soft: rgba(37, 99, 235, 0.1);
   --accent-strong: #1d4ed8;
+  --tone-sky: rgba(14, 165, 233, 0.18);
+  --tone-amber: rgba(245, 158, 11, 0.2);
+  --tone-violet: rgba(139, 92, 246, 0.16);
+  --status-success-bg: rgba(5, 150, 105, 0.14);
+  --status-success-fg: #047857;
+  --status-success-border: rgba(5, 120, 85, 0.35);
+  --status-danger-bg: rgba(220, 38, 38, 0.1);
+  --status-danger-fg: #991b1b;
+  --status-danger-border: rgba(185, 28, 28, 0.35);
+  --chip-public-bg: rgba(14, 165, 233, 0.13);
+  --chip-public-fg: #0369a1;
+  --chip-public-border: rgba(14, 165, 233, 0.32);
+  --chip-type-bg: rgba(139, 92, 246, 0.11);
+  --chip-type-fg: #5b21b6;
+  --chip-type-border: rgba(124, 58, 237, 0.3);
+  --tag-chip-bg: rgba(37, 99, 235, 0.12);
+  --tag-chip-fg: #1d4ed8;
+  --tag-chip-border: rgba(37, 99, 235, 0.3);
+  --chip-youtube-bg: rgba(220, 38, 38, 0.12);
+  --chip-youtube-fg: #b91c1c;
+  --chip-youtube-border: rgba(220, 38, 38, 0.32);
+  --queue-banner-bg: rgba(14, 165, 233, 0.1);
+  --queue-banner-border: rgba(14, 165, 233, 0.26);
+  --queue-banner-title: #0c4a6e;
+  --queue-banner-sub: #0369a1;
+  --btn-secondary-bg: rgba(37, 99, 235, 0.1);
+  --btn-secondary-fg: #1d4ed8;
+  --btn-secondary-border: rgba(37, 99, 235, 0.38);
 }
 
 html[data-theme="dark"] {

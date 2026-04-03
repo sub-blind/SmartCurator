@@ -12,7 +12,8 @@ export function HeroSection() {
           <p className="max-w-2xl break-keep text-lg leading-9 text-[var(--text-secondary)]">
             읽다가 북마크만 해두고 잊어버리는 일, 줄이고 싶어서 만든 서비스예요. 링크, 메모,
             파일을 한곳에 두고 나중에 단어가 정확히 기억 안 나도 비슷한 뜻으로 찾을 수 있어요.
-            로그인 전에는 공개 샘플만 검색해 보고, 로그인하면 내 자료 요약과 질문까지 이어집니다.
+            로그인 전에는 공개 샘플만 검색해 보고, 로그인하면 내 자료 요약과 질문까지{" "}
+            <span className="whitespace-nowrap">이어집니다.</span>
           </p>
         </div>
 

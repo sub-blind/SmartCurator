@@ -16,8 +16,15 @@ const UI_NOISE_PATTERNS: RegExp[] = [
   /url복사|프린트|글자크기/gi,
   /지면\s*아이콘/gi,
   /입력\s*\d{4}-\d{2}-\d{2}\s*\d{2}:\d{2}/gi,
+  /fn[Ss]urvey|fn영상|신문보기|메뉴\s*바로가기|베스트\s*댓글\s*이벤트/gi,
+  /지나친\s*욕설|비방|악의적인\s*게시물|삭제될\s*수\s*있습니다|신고할\s*수\s*있습니다/gi,
+  /\[신문고\]|［신문고］/g,
 ];
-const CONTENTS_PAGE_SIZE = 4;
+
+/** 뉴스 사이트 상단/푸터에 붙는 잡문구·깨진 링크 (replace 전용) */
+const SNIPPET_JUNK_REPLACE =
+  /tp:\/\/|tps:\/\/|:\/\/\(|www\.fnnews\.com|뉴스\s*1위|실시간\s*뉴스\s*속보|구독신청|모바일\s*웹/gi;
+const CONTENTS_PAGE_SIZE = 3;
 const TOAST_TTL_MS = 3500;
 const SUMMARY_PREVIEW_MAX_LENGTH = 560;
 
@@ -34,6 +41,7 @@ type TagStat = {
 
 type ContentSortOrder = "desc" | "asc";
 type SourceKind = "youtube" | "website" | "pdf" | "note";
+type DashboardView = "library" | "explore";
 
 function truncateText(text: string, maxLength: number) {
   const normalized = (text || "").replace(/\s+/g, " ").trim();
@@ -47,14 +55,40 @@ function cleanSnippet(text: string) {
   let cleaned = (text || "").replace(/\s+/g, " ").trim();
   cleaned = cleaned.replace(/!\[[^\]]*\]\([^)]+\)/g, " ");
   cleaned = cleaned.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, "$1");
+  /* 망가진 프로토콜·괄호로 감싼 URL 잔재 */
+  cleaned = cleaned.replace(/\b[a-z]{2,6}:\/{0,2}\(/gi, " ");
   cleaned = cleaned.replace(/https?:\/\/\S+/g, " ");
+  cleaned = cleaned.replace(/\bwww\.[a-z0-9.-]+\.[a-z]{2,12}[^\s)']*/gi, " ");
   cleaned = cleaned.replace(/\([^)]*instagram[^)]*\)/gi, " ");
   cleaned = cleaned.replace(/[*_`>#-]+/g, " ");
   for (const pattern of UI_NOISE_PATTERNS) {
     cleaned = cleaned.replace(pattern, " ");
   }
+  cleaned = cleaned.replace(SNIPPET_JUNK_REPLACE, " ");
   cleaned = cleaned.replace(/\s{2,}/g, " ").trim();
   return cleaned;
+}
+
+function isLikelyJunkSnippet(raw: string) {
+  const s = raw || "";
+  if (/tp:\/\/|tps:\/\/|www\.fnnews\.com|fnsurvey|fn영상|신문보기|댓글\s*운영|국민\s*신문고|악의적인\s*게시물/i.test(s)) {
+    return true;
+  }
+  const urlish = (s.match(/https?:\/\/|tp:\/\/|www\.\w+/gi) || []).length;
+  if (urlish >= 2) return true;
+  if (/욕설|비방|운영원칙/.test(s) && s.length < 360) return true;
+  return false;
+}
+
+/** 벡터 청크가 본문이 아닌 약관/메뉴를 잡았을 때 요약으로 대체 */
+function chooseSearchExcerpt(result: SearchResultItem) {
+  const rawSnip = result.top_snippet || "";
+  const rawSum = result.summary || "";
+  const cleanedSnip = cleanSnippet(rawSnip);
+  const cleanedSum = cleanSnippet(rawSum);
+  if (isLikelyJunkSnippet(rawSnip) && cleanedSum.length >= 28) return cleanedSum;
+  if (cleanedSnip.length < 28 && cleanedSum.length > cleanedSnip.length) return cleanedSum;
+  return cleanedSnip || cleanedSum || "매칭된 발췌문이 없습니다.";
 }
 
 function formatKoreanDateTime(value?: string | null) {
@@ -104,13 +138,15 @@ function getMatchReason(query: string, result: SearchResultItem) {
 function StatusBadge({ status }: { status: ContentItem["status"] }) {
   const base = "inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium";
   if (status === "completed") {
-    return <span className={`${base} bg-emerald-500/20 text-emerald-200`}>완료</span>;
+    return (
+      <span className={`${base} bg-[var(--status-success-bg)] text-[var(--status-success-fg)]`}>완료</span>
+    );
   }
   if (status === "processing") {
     return <span className={`${base} bg-blue-500/20 text-[var(--accent-strong)]`}>처리 중</span>;
   }
   if (status === "failed") {
-    return <span className={`${base} bg-red-500/20 text-red-200`}>실패</span>;
+    return <span className={`${base} bg-[var(--status-danger-bg)] text-[var(--status-danger-fg)]`}>실패</span>;
   }
   return <span className={`${base} bg-black/10 text-[var(--text-secondary)]`}>대기</span>;
 }
@@ -158,6 +194,27 @@ function DashboardPageContent() {
     }
     return "website";
   }, [sourceParam]);
+
+  const dashboardView = useMemo((): DashboardView => {
+    return searchParams.get("view") === "explore" ? "explore" : "library";
+  }, [searchParams]);
+
+  const setDashboardView = useCallback(
+    (next: DashboardView) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (next === "library") {
+        params.delete("view");
+      } else {
+        params.set("view", "explore");
+      }
+      const qs = params.toString();
+      router.replace(qs ? `/dashboard?${qs}` : "/dashboard", { scroll: false });
+      window.requestAnimationFrame(() => {
+        document.getElementById("dashboard-tablist")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
+    },
+    [router, searchParams],
+  );
 
   const ONBOARDING_DISMISS_KEY = "smartcurator_dashboard_quick_guide_dismissed_v1";
   const hasLoadedOnceRef = useRef(false);
@@ -435,9 +492,11 @@ function DashboardPageContent() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-[var(--accent-strong)]">빠른 가이드</p>
-              <h2 className="mt-1 text-lg font-semibold text-[var(--text-primary)]">지금 바로 쓰는 3단계</h2>
+              <h2 className="mt-1 text-lg font-semibold text-[var(--text-primary)]">처음 쓰실 때</h2>
               <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                1) 콘텐츠 추가 2) 의미 검색 3) AI 질의 순서로 시작하면 가장 빨리 결과를 볼 수 있어요.
+                위쪽 <strong className="font-semibold text-[var(--text-primary)]">내 자료</strong>에서 넣고 정리한 뒤,{" "}
+                <strong className="font-semibold text-[var(--text-primary)]">검색·AI</strong> 탭에서 찾거나 질문하면
+                흐름이 끊기지 않아요.
               </p>
             </div>
             <button
@@ -454,8 +513,63 @@ function DashboardPageContent() {
         </section>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <section className="surface-card self-start space-y-3 rounded-3xl p-6 lg:sticky lg:top-28">
+      <nav
+        id="dashboard-tablist"
+        className="surface-card rounded-3xl p-3 sm:p-4"
+        aria-label="대시보드 구역"
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div role="tablist" aria-label="보기 전환" className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <button
+              type="button"
+              role="tab"
+              id="dashboard-tab-library"
+              aria-selected={dashboardView === "library"}
+              aria-controls="dashboard-panel-library"
+              tabIndex={dashboardView === "library" ? 0 : -1}
+              onClick={() => setDashboardView("library")}
+              className={`min-h-[44px] rounded-2xl border px-4 py-2.5 text-left text-sm font-semibold transition sm:min-w-[9.5rem] ${
+                dashboardView === "library"
+                  ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)] shadow-sm shadow-[var(--accent)]/10"
+                  : "border-[var(--border-strong)] bg-[var(--surface-muted)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--text-primary)]"
+              }`}
+            >
+              내 자료
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="dashboard-tab-explore"
+              aria-selected={dashboardView === "explore"}
+              aria-controls="dashboard-panel-explore"
+              tabIndex={dashboardView === "explore" ? 0 : -1}
+              onClick={() => setDashboardView("explore")}
+              className={`min-h-[44px] rounded-2xl border px-4 py-2.5 text-left text-sm font-semibold transition sm:min-w-[9.5rem] ${
+                dashboardView === "explore"
+                  ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)] shadow-sm shadow-[var(--accent)]/10"
+                  : "border-[var(--border-strong)] bg-[var(--surface-muted)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--text-primary)]"
+              }`}
+            >
+              검색·AI
+            </button>
+          </div>
+          <p className="text-xs leading-relaxed text-[var(--text-muted)] sm:max-w-md sm:text-right">
+            {dashboardView === "library"
+              ? "저장한 글의 상태·요약·태그를 보고, 새 링크나 파일을 넣습니다."
+              : "키워드보다 뜻으로 찾거나, 저장해 둔 근거만 모아 AI에게 질문합니다."}
+          </p>
+        </div>
+      </nav>
+
+      <div
+        id="dashboard-panel-library"
+        role="tabpanel"
+        aria-labelledby="dashboard-tab-library"
+        hidden={dashboardView !== "library"}
+        className="space-y-6"
+      >
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <section className="surface-card space-y-3 rounded-3xl p-6 lg:sticky lg:top-28">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-xl font-semibold text-[var(--text-primary)]">내 콘텐츠</h1>
@@ -505,10 +619,10 @@ function DashboardPageContent() {
             </div>
           </div>
           {activeQueueCount > 0 && (
-            <div className="rounded-2xl border border-sky-300/25 bg-sky-500/10 p-3">
+            <div className="rounded-2xl border border-[var(--queue-banner-border)] bg-[var(--queue-banner-bg)] p-3">
               <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                <p className="text-sky-100">처리 큐 진행 중</p>
-                <p className="text-sky-200">
+                <p className="font-medium text-[var(--queue-banner-title)]">처리 큐 진행 중</p>
+                <p className="text-[13px] text-[var(--queue-banner-sub)]">
                   대기 {pendingCount}건 · 처리중 {processingCount}건
                 </p>
               </div>
@@ -518,7 +632,7 @@ function DashboardPageContent() {
             </div>
           )}
           {loading && <p className="text-xs text-[var(--text-muted)]">불러오는 중...</p>}
-          {message && <p className="text-xs text-red-300">{message}</p>}
+          {message && <p className="text-xs font-medium text-[var(--status-danger-fg)]">{message}</p>}
           <div className="mt-2 space-y-3">
             {filteredContents.length === 0 && !loading && (
               <p className="text-sm text-[var(--text-muted)]">
@@ -530,7 +644,7 @@ function DashboardPageContent() {
             {paginatedContents.map((item) => (
               <article
                 key={item.id}
-                className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4 transition hover:border-[var(--accent)]"
+                className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4 shadow-sm shadow-[var(--accent)]/8 ring-1 ring-[var(--accent)]/5 transition hover:border-[var(--accent)] hover:shadow-md hover:shadow-[var(--accent)]/12"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -544,17 +658,17 @@ function DashboardPageContent() {
                     <div className="mt-1 flex flex-wrap items-center gap-2">
                       <StatusBadge status={item.status} />
                       {item.is_public && (
-                        <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] text-[var(--text-primary)]">
+                        <span className="rounded-full border px-2 py-0.5 text-[11px] font-medium bg-[var(--chip-public-bg)] text-[var(--chip-public-fg)] [border-color:var(--chip-public-border)]">
                           공개
                         </span>
                       )}
                       {item.content_type && (
-                        <span className="rounded-full bg-black/10 px-2 py-0.5 text-[11px] text-[var(--text-secondary)]">
+                        <span className="rounded-full border px-2 py-0.5 text-[11px] font-medium bg-[var(--chip-type-bg)] text-[var(--chip-type-fg)] [border-color:var(--chip-type-border)]">
                           {item.content_type}
                         </span>
                       )}
                       {isYouTubeUrl(item.url) && (
-                        <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-[11px] text-red-100">
+                        <span className="rounded-full border px-2 py-0.5 text-[11px] font-medium bg-[var(--chip-youtube-bg)] text-[var(--chip-youtube-fg)] [border-color:var(--chip-youtube-border)]">
                           youtube
                         </span>
                       )}
@@ -584,19 +698,27 @@ function DashboardPageContent() {
                   </button>
                 )}
                 {item.status === "failed" && item.processing_error && (
-                  <p className="mt-2 rounded-lg border border-red-300/20 bg-red-500/10 px-2.5 py-2 text-[11px] text-red-200">
+                  <p className="mt-2 rounded-lg border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-2.5 py-2 text-[11px] text-[var(--status-danger-fg)]">
                     실패 원인: {truncateText(item.processing_error, 180)}
                   </p>
                 )}
                 {item.tags && item.tags.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {item.tags.map((tag) => (
-                      <span
+                      <button
                         key={tag}
-                        className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-200"
+                        type="button"
+                        onClick={() => {
+                          setActiveTagFilter((prev) => (prev === tag ? null : tag));
+                          setCurrentContentsPage(1);
+                        }}
+                        className={`rounded-full border px-2 py-0.5 text-[11px] font-medium transition bg-[var(--tag-chip-bg)] text-[var(--tag-chip-fg)] [border-color:var(--tag-chip-border)] hover:brightness-110 ${
+                          activeTagFilter === tag ? "ring-2 ring-[var(--accent)] ring-offset-1 ring-offset-[var(--surface-muted)]" : ""
+                        }`}
+                        title={`#${tag}만 목록에서 보기 (다시 누르면 해제)`}
                       >
                         #{tag}
-                      </span>
+                      </button>
                     ))}
                   </div>
                 )}
@@ -612,14 +734,14 @@ function DashboardPageContent() {
                           setMessage(err instanceof Error ? err.message : "재처리 요청에 실패했습니다.");
                         }
                       }}
-                      className="whitespace-nowrap rounded-full border border-[var(--border-strong)] px-3 py-1.5 text-[11px] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--text-primary)]"
+                      className="whitespace-nowrap rounded-full border px-3 py-1.5 text-[11px] font-semibold transition bg-[var(--btn-secondary-bg)] text-[var(--btn-secondary-fg)] [border-color:var(--btn-secondary-border)] hover:brightness-110"
                     >
                       {item.status === "failed" ? "다시 시도" : "재처리"}
                     </button>
                     <button
                       type="button"
                       onClick={() => setDeleteTarget(item)}
-                      className="whitespace-nowrap rounded-full border border-red-500/40 px-3 py-1.5 text-[11px] text-red-200 hover:bg-red-500/10"
+                      className="whitespace-nowrap rounded-full border-2 px-3 py-1.5 text-[11px] font-semibold transition bg-[var(--status-danger-bg)] text-[var(--status-danger-fg)] [border-color:var(--status-danger-border)] hover:brightness-95"
                     >
                       삭제
                     </button>
@@ -661,7 +783,7 @@ function DashboardPageContent() {
           )}
         </section>
 
-        <section className="surface-card space-y-3 rounded-3xl p-6">
+        <section className="surface-card w-full space-y-3 rounded-3xl p-6 lg:sticky lg:top-28">
           <div>
             <h2 className="text-lg font-semibold text-[var(--text-primary)]">콘텐츠 추가</h2>
             <p className="text-xs text-[var(--text-secondary)]">
@@ -709,15 +831,27 @@ function DashboardPageContent() {
           </div>
         </section>
       </div>
+      </div>
 
+      <div
+        id="dashboard-panel-explore"
+        role="tabpanel"
+        aria-labelledby="dashboard-tab-explore"
+        hidden={dashboardView !== "explore"}
+        className="space-y-6"
+      >
       <div className="grid gap-6 lg:grid-cols-2">
-        <section className="surface-card space-y-4 rounded-3xl p-6">
-          <div>
-            <h2 className="text-lg font-semibold text-[var(--text-primary)]">의미론적 검색</h2>
-            <p className="text-xs text-[var(--text-secondary)]">
-              저장한 콘텐츠를 키워드가 아니라 의미 기준으로 검색합니다. 결과는 핵심 snippet 중심으로 보여줍니다.
+        <section className="surface-card flex max-h-[min(88vh,52rem)] flex-col gap-4 rounded-3xl p-6 lg:sticky lg:top-28">
+          <div className="shrink-0 border-b border-[var(--border)] pb-3">
+            <span className="inline-flex rounded-lg bg-[var(--tone-sky)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-primary)]">
+              찾기
+            </span>
+            <h2 className="mt-1 text-lg font-semibold text-[var(--text-primary)]">의미론적 검색</h2>
+            <p className="mt-1 text-xs text-[var(--text-secondary)]">
+              저장한 콘텐츠를 키워드가 아니라 의미 기준으로 검색합니다. 잡문구·링크는 자동으로 걷어 냅니다.
             </p>
           </div>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
           <div className="flex flex-wrap gap-2">
             {[
               { id: "strict", label: "딱 맞는 결과", hint: "정확도 우선" },
@@ -761,23 +895,25 @@ function DashboardPageContent() {
           {searchMessage && <p className="text-xs text-[var(--text-secondary)]">{searchMessage}</p>}
           <div className="space-y-3">
             {searchResults.map((result) => {
-              const text = cleanSnippet(result.top_snippet || result.summary || "매칭된 발췌문이 없습니다.");
+              const text = chooseSearchExcerpt(result);
               const expanded = expandedSearchResults.has(result.content_id);
               const isLong = text.length > 220;
               return (
                 <article
                   key={result.content_id}
-                  className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4"
+                  className="rounded-2xl border border-[var(--border)] border-l-4 border-l-[var(--accent)] bg-[var(--surface-muted)] p-4 shadow-sm shadow-[var(--accent)]/5"
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-sm font-semibold text-[var(--text-primary)]">{displayTitle(result.title, result.content_id)}</h3>
-                    <span className="text-[11px] text-[var(--accent-strong)]">
+                  <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] pb-2">
+                    <h3 className="min-w-0 text-sm font-semibold leading-snug text-[var(--text-primary)]">
+                      {displayTitle(result.title, result.content_id)}
+                    </h3>
+                    <span className="shrink-0 rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--accent-strong)]">
                       유사도 {result.similarity_score.toFixed(3)}
                     </span>
                   </div>
-                  <p className="mt-1 text-[11px] text-[var(--text-muted)]">{getMatchReason(searchQuery, result)}</p>
-                  <div className="mt-2">
-                    <p className="whitespace-pre-wrap text-xs text-[var(--text-secondary)]">
+                  <p className="mt-2 text-[11px] text-[var(--text-muted)]">{getMatchReason(searchQuery, result)}</p>
+                  <div className="mt-2 rounded-xl bg-[var(--surface-elevated)]/60 px-3 py-2">
+                    <p className="whitespace-pre-wrap text-xs leading-relaxed text-[var(--text-secondary)]">
                       {expanded || !isLong ? text : truncateText(text, 220)}
                     </p>
                     {isLong && (
@@ -795,7 +931,7 @@ function DashboardPageContent() {
                       {result.tags.map((tag) => (
                         <span
                           key={tag}
-                          className="rounded-full bg-black/10 px-2 py-0.5 text-[11px] text-[var(--text-secondary)]"
+                          className="rounded-full border px-2 py-0.5 text-[11px] font-medium bg-[var(--tag-chip-bg)] text-[var(--tag-chip-fg)] [border-color:var(--tag-chip-border)]"
                         >
                           #{tag}
                         </span>
@@ -806,15 +942,20 @@ function DashboardPageContent() {
               );
             })}
           </div>
+          </div>
         </section>
 
-        <section className="surface-card space-y-4 rounded-3xl p-6">
-          <div>
-            <h2 className="text-lg font-semibold text-[var(--text-primary)]">AI 어시스턴트</h2>
-            <p className="text-xs text-[var(--text-secondary)]">
+        <section className="surface-card flex max-h-[min(88vh,52rem)] flex-col gap-4 rounded-3xl p-6 lg:sticky lg:top-28">
+          <div className="shrink-0 border-b border-[var(--border)] pb-3">
+            <span className="inline-flex rounded-lg bg-[var(--tone-violet)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-primary)]">
+              질문
+            </span>
+            <h2 className="mt-1 text-lg font-semibold text-[var(--text-primary)]">AI 어시스턴트</h2>
+            <p className="mt-1 text-xs text-[var(--text-secondary)]">
               저장한 기사와 노트의 근거 문단을 바탕으로 질문에 답변합니다.
             </p>
           </div>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1">
           <div className="space-y-3">
             <textarea
               value={question}
@@ -827,12 +968,14 @@ function DashboardPageContent() {
               type="button"
               onClick={handleAskAssistant}
               disabled={chatLoading}
-              className="rounded-xl bg-emerald-500/90 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+              className="rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white shadow-md shadow-[var(--accent)]/25 transition hover:brightness-110 disabled:opacity-50"
             >
               {chatLoading ? "답변 생성 중..." : "질문하기"}
             </button>
           </div>
-          {chatMessage && <p className="text-xs text-red-300">{chatMessage}</p>}
+          {chatMessage && (
+            <p className="text-xs font-medium text-[var(--status-danger-fg)]">{chatMessage}</p>
+          )}
           {chatAnswer && (
             <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
               <div className="flex items-center justify-between gap-3">
@@ -880,7 +1023,9 @@ function DashboardPageContent() {
               )}
             </div>
           )}
+          </div>
         </section>
+      </div>
       </div>
 
       {selectedContent && (
@@ -926,13 +1071,15 @@ function DashboardPageContent() {
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <StatusBadge status={selectedContent.status} />
               {selectedContent.is_public && (
-                <span className="rounded-full bg-black/10 px-2 py-0.5 text-[11px] text-[var(--text-primary)]">공개</span>
+                <span className="rounded-full border px-2 py-0.5 text-[11px] font-medium bg-[var(--chip-public-bg)] text-[var(--chip-public-fg)] [border-color:var(--chip-public-border)]">
+                  공개
+                </span>
               )}
-              <span className="rounded-full bg-black/10 px-2 py-0.5 text-[11px] text-[var(--text-secondary)]">
+              <span className="rounded-full border px-2 py-0.5 text-[11px] font-medium bg-[var(--chip-type-bg)] text-[var(--chip-type-fg)] [border-color:var(--chip-type-border)]">
                 {selectedContent.content_type}
               </span>
               {isYouTubeUrl(selectedContent.url) && (
-                <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-[11px] text-red-100">
+                <span className="rounded-full border px-2 py-0.5 text-[11px] font-medium bg-[var(--chip-youtube-bg)] text-[var(--chip-youtube-fg)] [border-color:var(--chip-youtube-border)]">
                   youtube
                 </span>
               )}
@@ -946,9 +1093,9 @@ function DashboardPageContent() {
             </div>
 
             {selectedContent.status === "failed" && selectedContent.processing_error && (
-              <div className="mt-3 rounded-xl border border-red-300/20 bg-red-500/10 p-3">
-                <p className="text-xs font-semibold text-red-200">실패 원인</p>
-                <p className="mt-1 text-xs text-red-100">{selectedContent.processing_error}</p>
+              <div className="mt-3 rounded-xl border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] p-3">
+                <p className="text-xs font-semibold text-[var(--status-danger-fg)]">실패 원인</p>
+                <p className="mt-1 text-xs text-[var(--status-danger-fg)]">{selectedContent.processing_error}</p>
               </div>
             )}
 
@@ -957,7 +1104,10 @@ function DashboardPageContent() {
                 <p className="mb-2 text-xs font-semibold text-[var(--text-secondary)]">태그</p>
                 <div className="flex flex-wrap gap-1.5">
                   {selectedContent.tags.map((tag) => (
-                    <span key={tag} className="rounded-full bg-black/10 px-2 py-0.5 text-[11px] text-[var(--text-secondary)]">
+                    <span
+                      key={tag}
+                      className="rounded-full border px-2 py-0.5 text-[11px] font-medium bg-[var(--tag-chip-bg)] text-[var(--tag-chip-fg)] [border-color:var(--tag-chip-border)]"
+                    >
                       #{tag}
                     </span>
                   ))}
@@ -1004,8 +1154,8 @@ function DashboardPageContent() {
                 key={toast.id}
                 className={`rounded-xl border px-3.5 py-2.5 text-sm leading-5 shadow-card backdrop-blur-md ${
                   toast.kind === "success"
-                    ? "border-emerald-300/35 bg-emerald-500/18 text-emerald-50"
-                    : "border-red-300/35 bg-red-500/18 text-red-50"
+                    ? "border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-fg)]"
+                    : "border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] text-[var(--status-danger-fg)]"
                 }`}
               >
                 {toast.text}
