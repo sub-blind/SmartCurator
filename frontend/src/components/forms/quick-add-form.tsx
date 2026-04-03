@@ -29,18 +29,18 @@ const SOURCE_OPTIONS: Array<{
   placeholder?: string;
 }> = [
   {
-    id: "youtube",
-    label: "유튜브",
-    description: "영상 링크를 넣고 요약과 핵심 포인트를 정리합니다.",
-    contentType: "url",
-    placeholder: "https://youtube.com/watch?v=abc",
-  },
-  {
     id: "website",
     label: "웹사이트",
     description: "기사나 블로그 링크를 저장하고 본문 요약을 생성합니다.",
     contentType: "url",
     placeholder: "https://news.example.com/article/123",
+  },
+  {
+    id: "youtube",
+    label: "유튜브",
+    description: "영상 링크를 넣고 요약과 핵심 포인트를 정리합니다.",
+    contentType: "url",
+    placeholder: "https://youtube.com/watch?v=abc",
   },
   {
     id: "pdf",
@@ -50,7 +50,7 @@ const SOURCE_OPTIONS: Array<{
   },
   {
     id: "note",
-    label: "메모/본문",
+    label: "메모",
     description: "직접 쓴 메모나 본문을 저장하고 요약을 생성합니다.",
     contentType: "text",
     placeholder: "회의 메모, 기사 초안, 읽고 싶은 문장을 붙여넣어 보세요.",
@@ -96,7 +96,7 @@ export function QuickAddForm({
   const [sourceKind, setSourceKind] = useState<SourceKind>(initialSource);
 
   const activeSource = useMemo(
-    () => SOURCE_OPTIONS.find((item) => item.id === sourceKind) ?? SOURCE_OPTIONS[1],
+    () => SOURCE_OPTIONS.find((item) => item.id === sourceKind) ?? SOURCE_OPTIONS[0],
     [sourceKind],
   );
 
@@ -198,11 +198,11 @@ export function QuickAddForm({
       <div>
         <p className="text-sm font-medium text-[var(--text-primary)]">자료 가져오기</p>
         <p className="text-xs text-[var(--text-muted)]">
-          유튜브, 웹사이트, PDF, 메모/본문을 저장해서 요약과 태그를 생성합니다.
+          웹사이트, 유튜브, PDF, 메모를 저장해서 요약과 태그를 생성합니다.
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center justify-center gap-2">
         {SOURCE_OPTIONS.map((option) => {
           const active = option.id === sourceKind;
           return (

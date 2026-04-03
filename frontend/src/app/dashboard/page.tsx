@@ -182,6 +182,7 @@ function DashboardPageContent() {
   const [contentSortOrder, setContentSortOrder] = useState<ContentSortOrder>("desc");
   const [deleteTarget, setDeleteTarget] = useState<ContentItem | null>(null);
   const [deletePending, setDeletePending] = useState(false);
+  const [detailThumbFailed, setDetailThumbFailed] = useState(false);
 
   const initialSource = useMemo<SourceKind>(() => {
     if (
@@ -377,6 +378,7 @@ function DashboardPageContent() {
 
   useEffect(() => {
     setEditingTitle(selectedContent?.title ?? "");
+    setDetailThumbFailed(false);
   }, [selectedContent]);
 
   const handleSemanticSearch = async () => {
@@ -841,7 +843,7 @@ function DashboardPageContent() {
         className="space-y-6"
       >
       <div className="grid gap-6 lg:grid-cols-2">
-        <section className="surface-card flex max-h-[min(88vh,52rem)] flex-col gap-4 rounded-3xl p-6 lg:sticky lg:top-28">
+        <section className="surface-card flex max-h-[min(88dvh,52rem)] flex-col gap-4 rounded-3xl p-6 lg:sticky lg:top-28">
           <div className="shrink-0 border-b border-[var(--border)] pb-3">
             <span className="inline-flex rounded-lg bg-[var(--tone-sky)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-primary)]">
               찾기
@@ -945,7 +947,7 @@ function DashboardPageContent() {
           </div>
         </section>
 
-        <section className="surface-card flex max-h-[min(88vh,52rem)] flex-col gap-4 rounded-3xl p-6 lg:sticky lg:top-28">
+        <section className="surface-card flex max-h-[min(88dvh,52rem)] flex-col gap-4 rounded-3xl p-6 lg:sticky lg:top-28">
           <div className="shrink-0 border-b border-[var(--border)] pb-3">
             <span className="inline-flex rounded-lg bg-[var(--tone-violet)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-primary)]">
               질문
@@ -1036,7 +1038,7 @@ function DashboardPageContent() {
           onClick={() => setSelectedContent(null)}
         >
           <div
-            className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-elevated)] p-5 shadow-card"
+            className="max-h-[85dvh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-elevated)] p-5 shadow-card"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="w-full">
@@ -1084,6 +1086,20 @@ function DashboardPageContent() {
                 </span>
               )}
             </div>
+
+            {selectedContent.thumbnail_url?.trim() && !detailThumbFailed && (
+              <div className="mt-4 flex min-h-0 justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-muted)]">
+                {/* object-contain: 잘리지 않고 전체 표시(여백은 카드 배경). cover는 영역 채우기 위해 상하/좌우를 자름 */}
+                <img
+                  src={selectedContent.thumbnail_url.trim()}
+                  alt={`${displayTitle(selectedContent.title, selectedContent.id)} 대표 이미지`}
+                  className="max-h-80 w-full object-contain"
+                  loading="lazy"
+                  referrerPolicy="no-referrer"
+                  onError={() => setDetailThumbFailed(true)}
+                />
+              </div>
+            )}
 
             <div className="mt-4 space-y-2">
               <p className="text-xs font-semibold text-[var(--text-secondary)]">요약 전체</p>

@@ -26,17 +26,17 @@ type SourceOption = {
 
 const SOURCE_OPTIONS: SourceOption[] = [
   {
-    id: "youtube",
-    label: "유튜브",
-    hint: "영상 링크를 넣으면 자막을 바탕으로 요약합니다.",
-    placeholder: "https://youtube.com/watch?v=abc",
-    contentType: "url",
-  },
-  {
     id: "website",
     label: "웹사이트",
     hint: "기사나 블로그 링크를 넣으면 본문 요약을 만듭니다.",
     placeholder: "https://news.example.com/article/123",
+    contentType: "url",
+  },
+  {
+    id: "youtube",
+    label: "유튜브",
+    hint: "영상 링크를 넣으면 자막을 바탕으로 요약합니다.",
+    placeholder: "https://youtube.com/watch?v=abc",
     contentType: "url",
   },
   {
@@ -48,7 +48,7 @@ const SOURCE_OPTIONS: SourceOption[] = [
   },
   {
     id: "note",
-    label: "메모/본문",
+    label: "메모",
     hint: "직접 쓴 메모나 본문도 바로 저장할 수 있습니다.",
     placeholder: "회의 메모, 기사 초안, 읽고 싶은 문장을 붙여넣어 보세요.",
     contentType: "text",
@@ -144,35 +144,10 @@ function buildYouTubeThumbnail(url: string) {
   }
 }
 
-function getPreviewTone(item: ContentItem) {
-  if ((item.url || "").includes("youtu")) return "from-rose-200 via-orange-100 to-white";
-  if (item.content_type === "text") return "from-violet-200 via-fuchsia-100 to-white";
-  if (item.content_type === "pdf") return "from-sky-200 via-cyan-100 to-white";
-  return "from-emerald-200 via-teal-100 to-white";
-}
-
-function getTypeLabel(item: ContentItem) {
-  if ((item.url || "").includes("youtu")) return "유튜브";
-  if (item.content_type === "text") return "메모/본문";
-  if (item.content_type === "pdf") return "PDF";
-  return "웹사이트";
-}
-
-function formatDate(value?: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString("ko-KR", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-}
-
 export function LandingIntakeSection() {
   const router = useRouter();
   const { token, initialized } = useAuth();
-  const [activeSource, setActiveSource] = useState<SourceKind>("youtube");
+  const [activeSource, setActiveSource] = useState<SourceKind>("website");
   const [draftValue, setDraftValue] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -182,10 +157,11 @@ export function LandingIntakeSection() {
   const [chatQuestion, setChatQuestion] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [summaryExpanded, setSummaryExpanded] = useState(false);
   const pollTimeoutRef = useRef<number | null>(null);
   const chatInputRef = useRef<HTMLInputElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  const [previewThumbFailed, setPreviewThumbFailed] = useState(false);
+  const [previewThumbLightboxOpen, setPreviewThumbLightboxOpen] = useState(false);
 
   const activeOption = useMemo(
     () => SOURCE_OPTIONS.find((item) => item.id === activeSource) ?? SOURCE_OPTIONS[0],
@@ -225,6 +201,20 @@ export function LandingIntakeSection() {
       setSelectedFile(null);
     }
   }, [activeSource]);
+
+  useEffect(() => {
+    setPreviewThumbFailed(false);
+    setPreviewThumbLightboxOpen(false);
+  }, [previewContent?.id]);
+
+  useEffect(() => {
+    if (!previewThumbLightboxOpen || typeof window === "undefined") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPreviewThumbLightboxOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [previewThumbLightboxOpen]);
 
   const pollContent = async (contentId: number, authToken: string, attempt = 0) => {
     try {
@@ -341,16 +331,16 @@ export function LandingIntakeSection() {
 
   return (
     <>
-    <section className="surface-card overflow-hidden rounded-[2rem] p-6 sm:p-8 lg:p-10">
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,0.98fr)_minmax(360px,0.82fr)] lg:items-start">
-        <div className="flex flex-col justify-between gap-6">
+    <section className="surface-card max-w-full overflow-hidden rounded-[1.5rem] p-4 sm:rounded-[2rem] sm:p-6 lg:p-8 xl:p-10">
+      <div className="grid min-w-0 gap-6 sm:gap-8 lg:grid-cols-[minmax(0,0.98fr)_minmax(0,1fr)] lg:items-stretch xl:grid-cols-[minmax(0,0.98fr)_minmax(320px,0.82fr)]">
+        <div className="flex min-w-0 flex-col gap-4 sm:gap-5 lg:min-h-0">
           <div className="relative">
             <div
-              className="pointer-events-none absolute -left-6 -top-6 h-36 w-44 rounded-full bg-[var(--accent)]/12 blur-3xl sm:h-40 sm:w-52"
+              className="pointer-events-none absolute -left-4 -top-4 h-32 w-36 rounded-full bg-[var(--accent)]/12 blur-3xl sm:-left-6 sm:-top-6 sm:h-40 sm:w-52"
               aria-hidden
             />
             <div
-              className="pointer-events-none absolute -right-4 top-24 h-28 w-36 rounded-full bg-[var(--tone-violet)] blur-3xl opacity-80 sm:top-28 sm:h-32 sm:w-44"
+              className="pointer-events-none absolute -right-2 top-20 h-24 w-32 rounded-full bg-[var(--tone-violet)] blur-3xl opacity-80 sm:-right-4 sm:top-28 sm:h-32 sm:w-44"
               aria-hidden
             />
             <div className="relative flex gap-0 sm:gap-6 lg:gap-8">
@@ -376,7 +366,7 @@ export function LandingIntakeSection() {
                   </span>
                 </h1>
                 <p className="max-w-lg text-[15px] leading-7 text-[var(--text-secondary)] sm:text-base sm:leading-8">
-                  유튜브는 자막을, 링크는 본문을 읽어 옵니다. 메모는 그대로 저장해 두고,
+                  웹 링크는 본문을, 유튜브는 자막을 읽어 옵니다. 메모는 그대로 저장해 두고,
                   <span className="text-[var(--text-primary)]"> 오른쪽 카드</span>에서 완료 여부와 요약을 바로 확인하면 됩니다.
                 </p>
               </div>
@@ -400,7 +390,7 @@ export function LandingIntakeSection() {
             ))}
           </div>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap items-center justify-center gap-3">
             {SOURCE_OPTIONS.map((option) => {
               const active = option.id === activeSource;
               return (
@@ -428,9 +418,9 @@ export function LandingIntakeSection() {
               </div>
             </div>
 
-            <div className="mt-5 flex gap-3">
+            <div className="mt-5 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-stretch">
               {activeSource === "pdf" ? (
-                <div className="flex min-h-[58px] flex-1 items-center gap-3 rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-elevated)] px-4">
+                <div className="flex min-h-[58px] min-w-0 flex-1 items-center gap-3 rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-elevated)] px-4">
                   <label className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-xl border border-[var(--border-strong)] bg-[var(--surface-muted)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition hover:border-[var(--accent)]">
                     <input
                       type="file"
@@ -449,7 +439,7 @@ export function LandingIntakeSection() {
                   value={draftValue}
                   onChange={(event) => setDraftValue(event.target.value)}
                   placeholder={activeOption.placeholder}
-                  className="min-h-[58px] flex-1 rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-elevated)] px-5 text-base text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none"
+                  className="min-h-[58px] min-w-0 w-full flex-1 rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-elevated)] px-4 text-base text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none sm:px-5"
                 />
               )}
 
@@ -457,7 +447,7 @@ export function LandingIntakeSection() {
                 type="button"
                 onClick={handleImport}
                 disabled={loading}
-                className="min-h-[58px] rounded-2xl bg-[var(--accent)] px-6 text-sm font-semibold text-white shadow-md shadow-[var(--accent)]/30 transition hover:brightness-110 disabled:opacity-60"
+                className="min-h-[58px] w-full shrink-0 rounded-2xl bg-[var(--accent)] px-6 text-sm font-semibold text-white shadow-md shadow-[var(--accent)]/30 transition hover:brightness-110 disabled:opacity-60 sm:w-auto sm:px-6"
               >
                 {loading ? "가져오는 중..." : "가져오기"}
               </button>
@@ -473,7 +463,7 @@ export function LandingIntakeSection() {
           </div>
         </div>
 
-        <div className="flex min-h-0 w-full flex-col max-h-[min(36rem,calc(100vh-10rem))] lg:-mt-2 lg:sticky lg:top-28 lg:max-h-[min(42rem,calc(100vh-8rem))] lg:h-[min(42rem,calc(100vh-8rem))]">
+        <div className="flex min-h-0 w-full min-w-0 flex-col max-h-[min(34rem,calc(100dvh-11rem))] sm:max-h-[min(36rem,calc(100dvh-10rem))] lg:h-full lg:max-h-none">
           {previewContent ? (
             <article className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface-elevated)]">
               <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface-muted)]/35 px-4 pt-3.5 pb-3 sm:px-5 sm:pt-4 sm:pb-3.5">
@@ -492,8 +482,8 @@ export function LandingIntakeSection() {
 
               {/* ── 헤더: 제목 + 상태 (고정) ── */}
               <div className="shrink-0 border-b border-[var(--border)] px-5 py-3">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="min-w-0 truncate text-sm font-semibold text-[var(--text-primary)]">
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="min-w-0 line-clamp-2 break-words text-sm font-semibold leading-snug text-[var(--text-primary)] sm:line-clamp-3">
                     {previewContent.title}
                   </h3>
                   <div className="flex shrink-0 items-center gap-2">
@@ -519,25 +509,53 @@ export function LandingIntakeSection() {
               {/* ── 스크롤 영역: 요약 + 대화 ── */}
               <div ref={chatScrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
 
-                {/* 요약·태그 */}
-                <div className="space-y-2 px-5 py-4">
-                  {previewContent.summary ? (
-                    <p className="text-sm leading-6 text-[var(--text-secondary)]">
-                      {previewContent.summary}
-                    </p>
-                  ) : (
-                    <p className="text-sm text-[var(--text-muted)]">
-                      요약을 만드는 중입니다…
-                    </p>
-                  )}
+                {/* 요약·태그 — 썸네일은 전체 너비(이전 형태), 제목·입력창과 함께 스크롤만 공유 */}
+                <div className="space-y-4 px-5 py-4">
+                  {previewContent.thumbnail_url?.trim() && !previewThumbFailed ? (
+                    <button
+                      type="button"
+                      onClick={() => setPreviewThumbLightboxOpen(true)}
+                      className="group block w-full overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] text-left shadow-sm outline-none transition hover:border-[var(--accent)] hover:shadow-md focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-elevated)]"
+                      aria-label="대표 이미지 크게 보기"
+                    >
+                      <div className="flex justify-center bg-[var(--surface-muted)]">
+                        <img
+                          src={previewContent.thumbnail_url.trim()}
+                          alt=""
+                          className="max-h-52 w-full object-contain sm:max-h-60"
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                          onError={() => setPreviewThumbFailed(true)}
+                        />
+                      </div>
+                      <p className="border-t border-[var(--border)] px-3 py-2 text-center text-[11px] text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]">
+                        탭하여 확대
+                      </p>
+                    </button>
+                  ) : null}
 
-                  {previewContent.tags && previewContent.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {previewContent.tags.map((tag) => (
-                        <span key={tag} className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] text-[var(--text-secondary)]">#{tag}</span>
-                      ))}
-                    </div>
-                  )}
+                  <div className="space-y-2">
+                    {previewContent.summary ? (
+                      <p className="text-sm leading-6 text-[var(--text-secondary)]">
+                        {previewContent.summary}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-[var(--text-muted)]">요약을 만드는 중입니다…</p>
+                    )}
+
+                    {previewContent.tags && previewContent.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {previewContent.tags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] text-[var(--text-secondary)]"
+                          >
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* 대화 메시지 */}
@@ -610,111 +628,108 @@ export function LandingIntakeSection() {
                   </div>
                 </div>
               )}
-            </article>
-          ) : (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface-elevated)]">
-              <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface-muted)]/35 px-4 pt-3.5 pb-3 sm:px-5 sm:pt-4 sm:pb-3.5">
-                <div className="min-w-0 space-y-0.5">
-                  <p className="text-base font-semibold leading-tight text-[var(--text-primary)] sm:text-[1.05rem]">
-                    방금 가져온 자료
-                  </p>
-                  <p className="text-xs leading-snug text-[var(--text-muted)] sm:text-[13px] sm:leading-relaxed">
-                    입력한 링크나 메모가 이 자리에서 바로 카드로 보입니다.
-                  </p>
-                </div>
-                <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--accent-strong)] sm:text-xs">
-                  Result
-                </span>
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-                <div className={`h-28 bg-gradient-to-br sm:h-32 ${
-                  activeSource === "youtube" ? "from-rose-500/20 via-orange-400/10 to-transparent"
-                    : activeSource === "pdf" ? "from-sky-500/20 via-cyan-400/10 to-transparent"
-                    : activeSource === "note" ? "from-violet-500/20 via-fuchsia-400/10 to-transparent"
-                    : "from-emerald-500/20 via-teal-400/10 to-transparent"
-                }`}>
-                  <div className="flex h-full items-center justify-center">
-                    <span className="text-4xl">
-                      {activeSource === "youtube" ? "▶" : activeSource === "pdf" ? "📄" : activeSource === "note" ? "✏️" : "🌐"}
-                    </span>
-                  </div>
-                </div>
 
-                <div className="space-y-3 p-5">
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-[var(--status-success-bg)] px-2 py-0.5 text-[11px] text-[var(--status-success-fg)]">
-                      완료
-                    </span>
-                    <span className="text-[11px] text-[var(--text-muted)]">예시 결과</span>
-                  </div>
-
-                  <h3 className="text-base font-semibold leading-6 text-[var(--text-primary)]">
-                    {activeSource === "youtube" && "유튜브 최초의 영상, 'Me at the zoo' 분석"}
-                    {activeSource === "website" && "파리기후협정 10년, 탄소중립 어디까지 왔나"}
-                    {activeSource === "pdf" && "2024 AI 트렌드 리포트 — 핵심 요약"}
-                    {activeSource === "note" && "RAG 아키텍처 정리 메모"}
-                  </h3>
-
-                  <p className="text-sm leading-6 text-[var(--text-secondary)]">
-                    {activeSource === "youtube" && "2005년 4월 23일에 업로드된 유튜브 최초의 영상으로, 공동 창업자 자베드 카림이 샌디에이고 동물원에서 코끼리를 배경으로 19초간 촬영한 영상이다. 이 영상은 소셜 미디어 콘텐츠의 시초로 평가받는다."}
-                    {activeSource === "website" && "파리협정 이후 10년, 전 세계 196개국의 탄소 감축 이행 현황을 점검한다. 재생에너지 비중은 30%를 넘었지만, 산업·수송 부문의 전환은 여전히 느리다."}
-                    {activeSource === "pdf" && "생성형 AI가 산업 전반에 미친 영향을 정리한 보고서의 핵심 내용을 요약했다. 멀티모달 모델의 등장과 온디바이스 AI 확산이 주요 트렌드로 꼽힌다."}
-                    {activeSource === "note" && "검색 보강 생성(RAG)은 외부 문서를 검색해 LLM 컨텍스트에 주입하는 방식이다. 환각을 줄이고 출처를 명시할 수 있어 기업 지식 관리에 적합하다."}
-                  </p>
-
-                  <div className="flex flex-wrap gap-1.5">
-                    {activeSource === "youtube" && ["유튜브", "역사", "소셜미디어"].map((t) => (
-                      <span key={t} className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] text-[var(--text-secondary)]">#{t}</span>
-                    ))}
-                    {activeSource === "website" && ["기후변화", "탄소중립", "재생에너지"].map((t) => (
-                      <span key={t} className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] text-[var(--text-secondary)]">#{t}</span>
-                    ))}
-                    {activeSource === "pdf" && ["AI트렌드", "멀티모달", "온디바이스"].map((t) => (
-                      <span key={t} className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] text-[var(--text-secondary)]">#{t}</span>
-                    ))}
-                    {activeSource === "note" && ["RAG", "LLM", "벡터검색"].map((t) => (
-                      <span key={t} className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] text-[var(--text-secondary)]">#{t}</span>
-                    ))}
-                  </div>
-
-                  <div className="border-t border-[var(--border)] pt-3">
-                    <div className="flex justify-end">
-                      <div className="max-w-[80%] rounded-2xl rounded-br-md bg-[var(--accent)]/60 px-3.5 py-2 text-sm text-white/80">
-                        {activeSource === "youtube" && "이 영상이 유튜브 역사에서 갖는 의미는?"}
-                        {activeSource === "website" && "한국의 탄소중립 이행 현황은?"}
-                        {activeSource === "pdf" && "올해 가장 주목할 AI 트렌드는?"}
-                        {activeSource === "note" && "RAG의 장점이 뭐야?"}
+              {previewThumbLightboxOpen &&
+                previewContent.thumbnail_url?.trim() &&
+                !previewThumbFailed && (
+                  <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="대표 이미지 크게 보기"
+                    className="fixed inset-0 z-[75] flex items-center justify-center bg-black/72 p-4 backdrop-blur-[2px]"
+                    onClick={() => setPreviewThumbLightboxOpen(false)}
+                  >
+                    <div
+                      className="flex max-h-[min(90dvh,920px)] w-full max-w-[min(96vw,56rem)] flex-col items-stretch gap-3"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewThumbLightboxOpen(false)}
+                          className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-xs font-medium text-white hover:bg-white/20"
+                        >
+                          닫기
+                        </button>
+                      </div>
+                      <div className="overflow-hidden rounded-2xl bg-black/40 shadow-2xl ring-1 ring-white/10">
+                        <img
+                          src={previewContent.thumbnail_url.trim()}
+                          alt={`${(previewContent.title || "").trim() || `콘텐츠 #${previewContent.id}`} 대표 이미지`}
+                          className="max-h-[min(82dvh,860px)] w-full object-contain"
+                          referrerPolicy="no-referrer"
+                        />
                       </div>
                     </div>
-                    <div className="mt-2">
-                      <p className="text-sm leading-6 text-[var(--text-secondary)]/60">
-                        {activeSource === "youtube" && "유튜브 최초의 영상으로서 사용자 제작 콘텐츠(UGC) 시대의 시작을 상징합니다. (출처 1)"}
-                        {activeSource === "website" && "한국은 2050 탄소중립을 선언했으나 석탄 비중이 높아 전환 속도가 과제입니다. (출처 1)"}
-                        {activeSource === "pdf" && "멀티모달 AI와 소형 언어모델의 온디바이스 탑재가 가장 큰 변화로 꼽힙니다. (출처 2)"}
-                        {activeSource === "note" && "외부 근거를 명시하므로 환각이 줄고, 출처를 함께 보여줄 수 있습니다. (출처 1)"}
-                      </p>
-                    </div>
                   </div>
+                )}
+            </article>
+          ) : (
+            <div
+              className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface-elevated)]"
+              aria-label="가져온 자료가 없습니다. 왼쪽에서 가져오기를 누르면 여기에 표시됩니다."
+            >
+              <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface-muted)]/35 px-4 pt-3.5 pb-3 sm:px-5 sm:pt-4 sm:pb-3.5">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface-elevated)] text-lg shadow-sm"
+                    aria-hidden
+                  >
+                    💬
+                  </div>
+                  <div className="min-w-0 space-y-0.5">
+                    <p className="text-base font-semibold leading-tight text-[var(--text-primary)] sm:text-[1.05rem]">
+                      이 자료와 대화
+                    </p>
+                    <p className="text-xs leading-snug text-[var(--text-muted)] sm:text-[13px] sm:leading-relaxed">
+                      가져오기 전 · 새 대화방
+                    </p>
+                  </div>
+                </div>
+                <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)] sm:text-xs">
+                  Chat
+                </span>
+              </div>
+
+              <div className="shrink-0 border-b border-[var(--border)] px-5 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="min-w-0 truncate text-sm text-[var(--text-muted)]">자료를 가져오면 제목이 여기에 붙습니다</p>
+                  <span className="shrink-0 rounded-full border border-[var(--border)] bg-[var(--surface-muted)]/50 px-2 py-0.5 text-[11px] text-[var(--text-muted)]">
+                    대기
+                  </span>
                 </div>
               </div>
 
-              <div className="shrink-0 border-t border-[var(--border)] px-4 py-3">
-                {SOURCE_EMPTY_PANEL[activeSource].examples.length > 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDraftValue(SOURCE_EMPTY_PANEL[activeSource].examples[0].value);
-                      setMessage(null);
-                    }}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+              <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[var(--surface-muted)]/20">
+                <div
+                  className="pointer-events-none absolute inset-0 opacity-[0.35] [background-image:radial-gradient(var(--border)_0.5px,transparent_0.5px)] [background-size:12px_12px]"
+                  aria-hidden
+                />
+                <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center px-5 py-10">
+                  <div className="max-w-[18rem] rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-5 text-center shadow-sm shadow-black/5">
+                    <p className="text-xs font-medium uppercase tracking-[0.14em] text-[var(--text-muted)]">메시지 없음</p>
+                    <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
+                      왼쪽에서 가져오기를 누르면 요약이 먼저 올라오고, 여기서 이어서 질문할 수 있어요.
+                    </p>
+                  </div>
+                  <p className="mt-6 text-[11px] text-[var(--text-muted)]">대화는 로그인 후 같은 자리에서 이어집니다</p>
+                </div>
+              </div>
+
+              <div className="shrink-0 border-t border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3">
+                <div className="flex items-center gap-2 opacity-[0.72]">
+                  <div className="pointer-events-none min-h-[40px] flex-1 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-muted)] px-4 py-2.5 text-sm text-[var(--text-muted)]">
+                    가져온 뒤 여기에서 질문해 보세요…
+                  </div>
+                  <div
+                    className="pointer-events-none flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-xl bg-[var(--accent)]/35 text-white"
+                    aria-hidden
                   >
-                    이 예시로 직접 해보기 →
-                  </button>
-                ) : (
-                  <p className="text-center text-xs text-[var(--text-muted)]">
-                    왼쪽에서 {activeOption.label}을(를) 입력하고 가져오기를 눌러 보세요
-                  </p>
-                )}
+                    <svg className="h-4 w-4 opacity-80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M5 12h14M12 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                </div>
               </div>
             </div>
           )}
