@@ -473,17 +473,22 @@ export function LandingIntakeSection() {
           </div>
         </div>
 
-        <div className="flex min-h-0 w-full flex-col max-h-[min(36rem,calc(100vh-10rem))] lg:sticky lg:top-28 lg:max-h-[min(42rem,calc(100vh-8rem))] lg:h-[min(42rem,calc(100vh-8rem))]">
-          <div className="mb-4 flex shrink-0 items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-[var(--text-primary)]">방금 가져온 자료</p>
-              <p className="text-xs text-[var(--text-muted)]">입력한 링크나 메모가 이 자리에서 바로 카드로 보입니다.</p>
-            </div>
-            <span className="text-xs font-medium uppercase tracking-[0.22em] text-[var(--accent-strong)]">Result</span>
-          </div>
-
+        <div className="flex min-h-0 w-full flex-col max-h-[min(36rem,calc(100vh-10rem))] lg:-mt-2 lg:sticky lg:top-28 lg:max-h-[min(42rem,calc(100vh-8rem))] lg:h-[min(42rem,calc(100vh-8rem))]">
           {previewContent ? (
             <article className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface-elevated)]">
+              <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface-muted)]/35 px-4 pt-3.5 pb-3 sm:px-5 sm:pt-4 sm:pb-3.5">
+                <div className="min-w-0 space-y-0.5">
+                  <p className="text-base font-semibold leading-tight text-[var(--text-primary)] sm:text-[1.05rem]">
+                    방금 가져온 자료
+                  </p>
+                  <p className="text-xs leading-snug text-[var(--text-muted)] sm:text-[13px] sm:leading-relaxed">
+                    입력한 링크나 메모가 이 자리에서 바로 카드로 보입니다.
+                  </p>
+                </div>
+                <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--accent-strong)] sm:text-xs">
+                  Result
+                </span>
+              </div>
 
               {/* ── 헤더: 제목 + 상태 (고정) ── */}
               <div className="shrink-0 border-b border-[var(--border)] px-5 py-3">
@@ -608,8 +613,21 @@ export function LandingIntakeSection() {
             </article>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface-elevated)]">
+              <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface-muted)]/35 px-4 pt-3.5 pb-3 sm:px-5 sm:pt-4 sm:pb-3.5">
+                <div className="min-w-0 space-y-0.5">
+                  <p className="text-base font-semibold leading-tight text-[var(--text-primary)] sm:text-[1.05rem]">
+                    방금 가져온 자료
+                  </p>
+                  <p className="text-xs leading-snug text-[var(--text-muted)] sm:text-[13px] sm:leading-relaxed">
+                    입력한 링크나 메모가 이 자리에서 바로 카드로 보입니다.
+                  </p>
+                </div>
+                <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--accent-strong)] sm:text-xs">
+                  Result
+                </span>
+              </div>
               <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-                <div className={`h-32 bg-gradient-to-br ${
+                <div className={`h-28 bg-gradient-to-br sm:h-32 ${
                   activeSource === "youtube" ? "from-rose-500/20 via-orange-400/10 to-transparent"
                     : activeSource === "pdf" ? "from-sky-500/20 via-cyan-400/10 to-transparent"
                     : activeSource === "note" ? "from-violet-500/20 via-fuchsia-400/10 to-transparent"

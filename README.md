@@ -31,13 +31,15 @@
 
 ## 스크린샷
 
-| 로그인 | 대시보드 — 처리 큐 |
-|:--:|:--:|
-| ![로그인 화면](docs/screenshots/01-login.png) | ![대시보드 - 대기/처리 큐](docs/screenshots/02-dashboard-queue.png) |
+홈(랜딩)에서 링크를 넣고 오른쪽 **방금 가져온 자료** 카드로 처리 상태·요약·AI 질문까지 이어지는 흐름입니다.
 
-| 대시보드 — 요약·태그·토스트 | 의미 검색 + RAG 어시스턴트 |
+| 가져오기 직후 · 처리 중 | 요약·태그 완료 |
 |:--:|:--:|
-| ![대시보드 - 요약 및 완료 알림](docs/screenshots/03-dashboard-summary-toast.png) | ![의미 검색과 AI 질의·근거](docs/screenshots/04-semantic-search-rag.png) |
+| ![랜딩 — 처리 중 프리뷰](docs/screenshots/landing-01-processing.png) | ![랜딩 — 요약 및 태그](docs/screenshots/landing-02-summary.png) |
+
+| AI 질문·출처 (랜딩 프리뷰 카드) |
+|:--:|
+| ![랜딩 — AI 어시스턴트·근거](docs/screenshots/landing-03-rag-chat.png) |
 
 ## 최근 변경 (2026-04)
 
