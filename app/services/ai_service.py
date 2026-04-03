@@ -1,7 +1,7 @@
 ﻿import json
 import logging
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.core.config import settings
 
@@ -35,7 +35,7 @@ class AIService:
                     "추측 없이 사실 위주로 정리하고, 수치/날짜/고유명사를 우선 반영하세요."
                 ),
                 user_message=prompt,
-                max_tokens=350,
+                max_tokens=520,
                 temperature=0.2,
             )
             normalized = self._normalize_summary_payload(response, "문단 요약을 생성할 수 없습니다.")
@@ -45,8 +45,110 @@ class AIService:
                 "success": True,
             }
         except Exception as e:
-            logger.error(f"chunk 요약 실패: {e}")
+            logger.warning("chunk JSON 요약 실패, 평문 폴백 시도: %s", e)
+            plain = await self._summarize_chunk_plain(chunk, title, url)
+            if plain.get("success"):
+                return plain
+            logger.error("chunk 평문 폴백도 실패: %s", plain.get("error", plain))
+            return {
+                "success": False,
+                "error": str(plain.get("error") or e),
+                "summary": "",
+            }
+
+    async def _summarize_chunk_plain(self, chunk: str, title: str = "", url: str = "") -> Dict[str, Any]:
+        """JSON 응답이 깨질 때 chunk 요약용 폴백(구조화 평문)."""
+        chunk_truncated = chunk[:9000] if len(chunk) > 9000 else chunk
+        user_message = f"""
+다음은 기사 또는 문서의 일부 문단입니다.
+
+제목: {title}
+URL: {url}
+문단:
+{chunk_truncated}
+
+규칙: 사실만, 추측 금지. 2~3문장 요약과 핵심 불릿 3개.
+
+아래 형식만 출력하세요(JSON 금지, 다른 말 없이).
+
+요약: (2~3문장을 한 블록으로)
+핵심:
+- 첫 번째 핵심
+- 두 번째 핵심
+- 세 번째 핵심
+"""
+        try:
+            response = await self._chat_completion(
+                system_message=(
+                    "당신은 기사/문서의 핵심만 압축해 정리하는 에디터입니다. "
+                    "사용자가 지정한 '요약:' / '핵심:' 형식만 출력하세요."
+                ),
+                user_message=user_message,
+                max_tokens=450,
+                temperature=0.2,
+                force_json=False,
+            )
+            raw = (response.choices[0].message.content or "").strip()
+            summary, key_points = self._parse_plain_chunk_summary(raw)
+            if not summary:
+                return {"success": False, "error": "평문 요약 파싱 실패", "summary": ""}
+            return {
+                "summary": summary,
+                "key_points": key_points[:4],
+                "success": True,
+            }
+        except Exception as e:
             return {"success": False, "error": str(e), "summary": ""}
+
+    def _parse_plain_chunk_summary(self, text: str) -> Tuple[str, List[str]]:
+        summary_parts: List[str] = []
+        key_points: List[str] = []
+        mode: Optional[str] = None
+
+        for raw_line in (text or "").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if line.startswith(("요약:", "요약：")):
+                mode = "summary"
+                rest = line[3:].strip()
+                if rest:
+                    summary_parts.append(rest)
+                continue
+            if line.startswith(("핵심:", "핵심：")):
+                mode = "bullets"
+                continue
+            if line.startswith("- "):
+                mode = "bullets"
+                key_points.append(line[2:].strip())
+                continue
+            if line.startswith("• "):
+                mode = "bullets"
+                key_points.append(line[2:].strip())
+                continue
+            if line.startswith("-") and len(line) > 1:
+                mode = "bullets"
+                key_points.append(line[1:].strip())
+                continue
+            if mode == "summary":
+                summary_parts.append(line)
+
+        summary = self._normalize_text(" ".join(summary_parts))
+        if not summary:
+            non_empty = [ln.strip() for ln in text.splitlines() if ln.strip()]
+            if non_empty:
+                summary = self._normalize_text(" ".join(non_empty[:4]))
+
+        seen: set[str] = set()
+        deduped: List[str] = []
+        for kp in key_points:
+            k = self._normalize_text(kp)
+            if len(k) < 2 or k.lower() in seen:
+                continue
+            seen.add(k.lower())
+            deduped.append(k)
+
+        return summary, deduped[:8]
 
     async def summarize_content(self, content: str, title: str = "", url: str = "") -> Dict[str, Any]:
         """짧은 컨텐츠용 단일 요약. 긴 문서는 synthesize_chunk_summaries와 함께 사용한다."""
@@ -310,9 +412,13 @@ chunk 요약들:
         try:
             return self._extract_json(raw)
         except json.JSONDecodeError as exc:
-            logger.warning(f"JSON 파싱 실패, 복구 시도: {exc}")
-            repaired_raw = await self._repair_json_with_llm(raw, max_tokens=max_tokens)
-            return self._extract_json(repaired_raw)
+            logger.warning("JSON 파싱 실패, 복구 시도: %s", exc)
+            try:
+                repaired_raw = await self._repair_json_with_llm(raw, max_tokens=max_tokens)
+                return self._extract_json(repaired_raw)
+            except json.JSONDecodeError as exc2:
+                logger.warning("JSON 복구 후에도 파싱 실패: %s", exc2)
+                raise exc2 from exc
 
     async def _chat_completion(
         self,
@@ -380,14 +486,28 @@ chunk 요약들:
         return response.choices[0].message.content or "{}"
 
     def _extract_json(self, response: str) -> Dict[str, Any]:
+        text = (response or "").strip()
+        if not text:
+            raise json.JSONDecodeError("empty", "", 0)
         try:
-            return json.loads(response)
+            data = json.loads(text)
+            return data if isinstance(data, dict) else {}
         except json.JSONDecodeError:
-            start = response.find("{")
-            end = response.rfind("}")
-            if start != -1 and end != -1 and end > start:
-                return json.loads(response[start : end + 1])
-            raise
+            pass
+        start = text.find("{")
+        if start == -1:
+            raise json.JSONDecodeError("no object", text, 0)
+        decoder = json.JSONDecoder()
+        try:
+            data, _end = decoder.raw_decode(text[start:])
+            if isinstance(data, dict):
+                return data
+        except json.JSONDecodeError:
+            pass
+        end = text.rfind("}")
+        if end > start:
+            return json.loads(text[start : end + 1])
+        raise json.JSONDecodeError("unparseable", text, start)
 
     def _prepare_chunk_summaries(self, chunk_summaries: List[str]) -> List[str]:
         seen = set()
