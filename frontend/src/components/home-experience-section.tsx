@@ -59,7 +59,7 @@ export function HomeExperienceSection() {
     return (
       <Section
         id="quick-guide"
-        title="대시보드에서는 이렇게 쓰면 돼요"
+        title="내 자료는 이렇게 쓰면 돼요"
         description="순서는 대충 이 세 가지예요."
       >
         <div className="grid gap-4 md:grid-cols-3">
@@ -92,7 +92,7 @@ export function HomeExperienceSection() {
             href="/dashboard"
             className="rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
           >
-            대시보드로 이동
+            내 자료 열기
           </Link>
         </div>
       </Section>

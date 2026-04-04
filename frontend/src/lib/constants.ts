@@ -31,11 +31,11 @@ export const buildSteps = [
   {
     title: "설계 포인트",
     detail: "비동기 요약 파이프라인, 의미론 검색 정확도 모드, RAG 기반 Q&A, 재처리/삭제 운영 기능 구현",
-    evidence: "대시보드에서 상태 변화(pending->processing->completed), 검색 모드, 출처 기반 답변을 즉시 확인 가능"
+    evidence: "내 자료 화면에서 상태 변화(pending->processing->completed), 검색 모드, 출처 기반 답변을 즉시 확인 가능"
   },
   {
     title: "운영 기준",
-    detail: "대시보드 탭 분리(내 자료/검색·AI), 페이지당 3개, 태그 필터, 스니펫 잡문구 자동 정리, 라이트/다크 대비 보장",
+    detail: "내 자료 화면 탭 분리(내 자료/검색·AI), 페이지당 3개, 태그 필터, 스니펫 잡문구 자동 정리, 라이트/다크 대비 보장",
     evidence: "비로그인 모달, 프리뷰 RAG 채팅·독립 스크롤, CTA 액센트 고정, break-keep 한글 줄바꿈, 터널·CORS 검증"
   },
   {

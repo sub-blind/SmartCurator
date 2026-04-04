@@ -467,7 +467,7 @@ function DashboardPageContent() {
       <div className="surface-card mx-auto max-w-md space-y-4 rounded-3xl p-8 text-center">
         <h1 className="text-2xl font-semibold text-[var(--text-primary)]">로그인이 필요합니다</h1>
         <p className="mt-2 text-sm text-[var(--text-secondary)]">
-          대시보드에서는 저장한 콘텐츠, 검색, AI 어시스턴트 기능을 사용할 수 있습니다.
+          내 자료에서는 저장한 콘텐츠, 검색, AI 질문까지 한곳에서 쓸 수 있어요.
         </p>
         <div className="mt-4 flex justify-center gap-3">
           <Link
@@ -518,7 +518,7 @@ function DashboardPageContent() {
       <nav
         id="dashboard-tablist"
         className="surface-card rounded-3xl p-3 sm:p-4"
-        aria-label="대시보드 구역"
+        aria-label="내 자료·검색·AI"
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <div role="tablist" aria-label="보기 전환" className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
@@ -1186,7 +1186,7 @@ function DashboardPageContent() {
 
 export default function DashboardPage() {
   return (
-    <Suspense fallback={<p className="text-sm text-[var(--text-secondary)]">대시보드를 준비 중입니다...</p>}>
+    <Suspense fallback={<p className="text-sm text-[var(--text-secondary)]">내 자료 화면을 불러오는 중이에요...</p>}>
       <DashboardPageContent />
     </Suspense>
   );

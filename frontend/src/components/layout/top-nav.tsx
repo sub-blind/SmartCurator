@@ -43,7 +43,7 @@ export function TopNav() {
         href="/dashboard"
         className="whitespace-nowrap rounded-full px-2 py-1 transition hover:text-[var(--text-primary)]"
       >
-        대시보드
+        내 자료
       </Link>
       <Link
         href="/project-notes"
@@ -72,7 +72,7 @@ export function TopNav() {
         )}
 
         <div className="mx-auto max-w-6xl px-4 py-3 sm:px-10">
-          {/* 모바일: 로고·테마·계정 + 바로 노출 링크(소개·대시보드). 프로젝트 노트는 제외 */}
+          {/* 모바일: 로고·테마·계정 + 바로 노출 링크(소개·내 자료). 프로젝트 노트는 제외 */}
           <div className="flex flex-col gap-2 sm:hidden">
             <div className="flex items-center justify-between gap-2">
               <Link
@@ -130,7 +130,7 @@ export function TopNav() {
                   pathname === "/dashboard" ? "text-[var(--accent-strong)]" : ""
                 }`}
               >
-                대시보드
+                내 자료
               </Link>
             </nav>
           </div>

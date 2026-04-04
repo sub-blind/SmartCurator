@@ -59,7 +59,7 @@ export default function ProjectNotesPage() {
           <li>히어로·랜딩 제목: <span className="whitespace-nowrap">break-keep</span> + <span className="whitespace-nowrap">nowrap</span>으로 한글 줄바꿈 깨짐 방지</li>
         </ul>
 
-        <h3 className="mt-6 text-base font-semibold text-[var(--text-primary)]">대시보드 UX</h3>
+        <h3 className="mt-6 text-base font-semibold text-[var(--text-primary)]">내 자료 화면 UX</h3>
         <ul className="mt-2 list-inside list-disc space-y-2 text-sm text-[var(--text-secondary)]">
           <li>「내 자료」/「검색·AI」 탭으로 역할 분리, URL 쿼리 <code className="rounded bg-[var(--surface-muted)] px-1 text-[13px]">?view=explore</code> 딥링크</li>
           <li>콘텐츠 목록: 페이지당 3개, 태그 클릭 필터</li>

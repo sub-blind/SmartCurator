@@ -28,7 +28,7 @@
   --status-danger-bg: rgba(239, 68, 68, 0.2);
   --status-danger-fg: #fecaca;
   --status-danger-border: rgba(248, 113, 113, 0.45);
-  /* 대시보드 카드: 공개·유형·태그·유튜브 칩, 처리 큐, 재처리 버튼 */
+  /* 내 자료 화면 카드: 공개·유형·태그·유튜브 칩, 처리 큐, 재처리 버튼 */
   --chip-public-bg: rgba(14, 165, 233, 0.18);
   --chip-public-fg: #e0f2fe;
   --chip-public-border: rgba(56, 189, 248, 0.4);

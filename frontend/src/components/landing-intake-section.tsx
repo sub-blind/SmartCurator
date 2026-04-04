@@ -84,7 +84,7 @@ const SOURCE_EMPTY_PANEL: Record<
   },
   pdf: {
     headline: "이 화면에서 PDF를 바로 올릴 수 있어요",
-    tip: "왼쪽에서 파일을 고른 뒤 가져오기를 누르면 요약·태그 파이프라인이 돌아가요. 여러 파일은 대시보드가 편해요.",
+    tip: "왼쪽에서 파일을 고른 뒤 가져오기를 누르면 요약·태그 파이프라인이 돌아가요. 여러 파일은 내 자료 화면이 편해요.",
     examples: [],
   },
   note: {
@@ -230,7 +230,7 @@ export function LandingIntakeSection() {
         }, LANDING_POLL_INTERVAL_MS);
       } else if (stillWorking && attempt >= LANDING_POLL_MAX_ATTEMPTS) {
         setMessage(
-          "여기서는 더 갱신하지 않아요. 잠시 후 대시보드에서 같은 항목을 확인해 보세요. 오래 걸리면 백그라운드 워커가 돌고 있는지도 확인해 주세요.",
+          "여기서는 더 갱신하지 않아요. 잠시 후 내 자료에서 같은 항목을 확인해 보세요. 오래 걸리면 백그라운드 워커가 돌고 있는지도 확인해 주세요.",
         );
       }
     } catch {
@@ -501,7 +501,7 @@ export function LandingIntakeSection() {
                     {previewContent.url && (
                       <a href={previewContent.url} target="_blank" rel="noreferrer" className="text-[11px] text-[var(--accent-strong)] hover:underline">원문</a>
                     )}
-                    <button type="button" onClick={() => router.push("/dashboard")} className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)]">대시보드</button>
+                    <button type="button" onClick={() => router.push("/dashboard")} className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-primary)]">내 자료</button>
                   </div>
                 </div>
               </div>
