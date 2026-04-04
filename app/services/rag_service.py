@@ -6,27 +6,34 @@ from typing import Dict, List
 from app.core.config import settings
 from app.services.ai_service import AIService
 from app.services.vector_service import vector_service
-from app.utils.search_ranking import compute_token_overlap
+from app.utils.search_ranking import (
+    compute_token_overlap,
+    contains_anchor_terms,
+    extract_anchor_terms,
+    is_noisy_text,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class RAGService:
-    """RAG (Retrieval-Augmented Generation) service."""
+    """RAG service for grounded question answering over stored content."""
 
     def __init__(self):
         self.ai_service = AIService()
         self.max_context_length = getattr(settings, "MAX_CONTEXT_LENGTH", 3000)
-        self.rerank_similarity_weight = 0.8
-        self.rerank_overlap_weight = 0.2
+        self.rerank_similarity_weight = 0.7
+        self.rerank_overlap_weight = 0.3
         self.max_chunks_per_content = 2
-        self.min_visible_source_score = 0.28
+        self.min_visible_source_score = 0.34
         self._noise_patterns = [
             re.compile(r"공유(하기)?", re.IGNORECASE),
             re.compile(r"페이스북|카카오톡|밴드|트위터", re.IGNORECASE),
             re.compile(r"URL복사|프린트|글자크기", re.IGNORECASE),
             re.compile(r"지면\s*아이콘", re.IGNORECASE),
             re.compile(r"입력\s*\d{4}-\d{2}-\d{2}\s*\d{2}:\d{2}", re.IGNORECASE),
+            re.compile(r"javascript\s*:", re.IGNORECASE),
+            re.compile(r"뉴스\s*듣기", re.IGNORECASE),
         ]
 
     def _sanitize_query_for_log(self, text: str) -> str:
@@ -48,8 +55,8 @@ class RAGService:
                 query=question,
                 user_id=user_id,
                 limit=12,
-                score_threshold=0.12,
-                fallback_threshold=0.05,
+                score_threshold=0.18,
+                fallback_threshold=0.12,
             )
             reranked_chunks = self._rerank_chunks(question, retrieved_chunks)[:8]
             visible_chunks = self._filter_visible_chunks(reranked_chunks)
@@ -67,7 +74,7 @@ class RAGService:
                     latency_ms,
                 )
                 return {
-                    "answer": "죄송합니다. 질문에 답할 만큼 신뢰도 있는 저장 자료를 찾지 못했습니다.",
+                    "answer": "죄송합니다. 질문에 맞는 근거 문서를 충분히 찾지 못했습니다.",
                     "sources": [],
                     "confidence": 0.0,
                 }
@@ -131,7 +138,7 @@ class RAGService:
             content_text = (
                 f"\n[출처 {index}] {chunk['title']} (chunk {chunk['chunk_index']})\n"
                 f"내용:\n{cleaned_chunk_text}\n"
-                f"관련도: {chunk['similarity_score']:.1%}\n---"
+                f"유사도: {chunk['similarity_score']:.1%}\n---"
             )
 
             if current_length + len(content_text) > self.max_context_length:
@@ -152,15 +159,20 @@ class RAGService:
         if not chunks:
             return []
 
+        anchor_terms = extract_anchor_terms(question)
         scored: List[Dict] = []
         for chunk in chunks:
-            overlap = compute_token_overlap(
-                question,
-                f"{chunk.get('title', '')} {chunk.get('chunk_text', '')}",
-            )
+            chunk_text = chunk.get("chunk_text", "")
+            if is_noisy_text(chunk_text):
+                continue
+
+            source_text = f"{chunk.get('title', '')} {chunk_text} {' '.join(chunk.get('tags', []))}"
+            overlap = compute_token_overlap(question, source_text)
+            anchor_bonus = 0.08 if anchor_terms and contains_anchor_terms(source_text, anchor_terms) else 0.0
             hybrid_score = (
                 chunk.get("similarity_score", 0.0) * self.rerank_similarity_weight
                 + overlap * self.rerank_overlap_weight
+                + anchor_bonus
             )
             scored.append({**chunk, "_hybrid_score": hybrid_score})
 
@@ -184,8 +196,8 @@ class RAGService:
 
         top_similarity = chunks[0].get("similarity_score", 0.0)
         top_hybrid = chunks[0].get("_hybrid_score", top_similarity)
-        relative_similarity_floor = max(self.min_visible_source_score, top_similarity - 0.10)
-        relative_hybrid_floor = max(top_hybrid - 0.12, 0.0)
+        relative_similarity_floor = max(self.min_visible_source_score, top_similarity - 0.06)
+        relative_hybrid_floor = max(top_hybrid - 0.08, 0.0)
 
         return [
             chunk

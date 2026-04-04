@@ -21,6 +21,8 @@ SCRAPE_FAILURE_MARKERS = (
     "unable to extract content",
     "content could not be extracted",
 )
+DIRECT_SUMMARY_CHAR_LIMIT = 2200
+DIRECT_SUMMARY_MAX_CHUNKS = 2
 
 
 def _merge_chunks_for_summary(chunks: list[str], max_chunks: int = MAX_SUMMARY_CHUNKS) -> list[str]:
@@ -65,6 +67,24 @@ def _clean_generated_title(title: str, fallback: str) -> str:
     if fallback_normalized:
         return fallback_normalized[:60].strip()
     return "요약 콘텐츠"
+
+
+def _is_usable_scraped_title(title: str | None) -> bool:
+    normalized = " ".join((title or "").split()).strip()
+    if len(normalized) < 8:
+        return False
+    lowered = normalized.lower()
+    generic_markers = (
+        "youtube",
+        "youtu.be",
+        "naver",
+        "news",
+        "기사",
+        "웹페이지",
+    )
+    if normalized in AUTO_TITLE_MARKERS:
+        return False
+    return not any(marker in lowered and len(normalized) <= 18 for marker in generic_markers)
 
 
 def _generate_title_with_ai(ai_service: AIService, raw_content: str, url: str, fallback: str) -> str:
@@ -114,6 +134,12 @@ def _is_youtube_url(url: str | None) -> bool:
 def _sentence_count(text: str) -> int:
     parts = [p.strip() for p in re.split(r"[.!?]\s+|[.!?]$", (text or "").strip()) if p.strip()]
     return len(parts)
+
+
+def _should_use_direct_summary(raw_content: str, chunks: list[str]) -> bool:
+    if not raw_content:
+        return False
+    return len(raw_content) <= DIRECT_SUMMARY_CHAR_LIMIT and len(chunks) <= DIRECT_SUMMARY_MAX_CHUNKS
 
 
 @celery_app.task(bind=True, max_retries=2, default_retry_delay=30)
@@ -187,11 +213,15 @@ def _process_content_sync(content_id: int):
                 if scraped_thumbnail_url:
                     content.thumbnail_url = scraped_thumbnail_url
                 if _needs_auto_title(content.title):
-                    content.title = _generate_title_with_ai(
-                        ai_service=ai_service,
-                        raw_content=scraped_content,
-                        url=content.url or "",
-                        fallback=scraped_title,
+                    content.title = (
+                        scraped_title
+                        if _is_usable_scraped_title(scraped_title)
+                        else _generate_title_with_ai(
+                            ai_service=ai_service,
+                            raw_content=scraped_content,
+                            url=content.url or "",
+                            fallback=scraped_title,
+                        )
                     )
                 logger.info("✅ 크롤링 완료: %s chars", len(content.raw_content or ""))
             else:
@@ -206,26 +236,9 @@ def _process_content_sync(content_id: int):
             logger.info("🤖 AI 요약 시작: content_id=%s", content_id)
             chunks = split_into_chunks(content.raw_content, chunk_size=1100, overlap=180)
             chunks = _merge_chunks_for_summary(chunks or [content.raw_content])
-            chunk_summaries = []
+            use_direct_summary = _should_use_direct_summary(content.raw_content, chunks)
 
-            for chunk in chunks:
-                chunk_res = asyncio.run(
-                    ai_service.summarize_chunk(
-                        chunk,
-                        content.title or "",
-                        content.url or "",
-                    )
-                )
-                if not chunk_res.get("success"):
-                    error_msg = chunk_res.get("error", "chunk 요약 실패")
-                    logger.error("❌ chunk 요약 실패: %s", error_msg)
-                    content.status = "failed"
-                    content.processing_error = error_msg
-                    session.commit()
-                    return {"content_id": content_id, "status": "failed", "error": error_msg}
-                chunk_summaries.append(chunk_res.get("summary", ""))
-
-            if len(chunk_summaries) == 1:
+            if use_direct_summary:
                 ai_res = asyncio.run(
                     ai_service.summarize_content(
                         content.raw_content,
@@ -234,6 +247,25 @@ def _process_content_sync(content_id: int):
                     )
                 )
             else:
+                chunk_summaries = []
+
+                for chunk in chunks:
+                    chunk_res = asyncio.run(
+                        ai_service.summarize_chunk(
+                            chunk,
+                            content.title or "",
+                            content.url or "",
+                        )
+                    )
+                    if not chunk_res.get("success"):
+                        error_msg = chunk_res.get("error", "chunk 요약 실패")
+                        logger.error("❌ chunk 요약 실패: %s", error_msg)
+                        content.status = "failed"
+                        content.processing_error = error_msg
+                        session.commit()
+                        return {"content_id": content_id, "status": "failed", "error": error_msg}
+                    chunk_summaries.append(chunk_res.get("summary", ""))
+
                 ai_res = asyncio.run(
                     ai_service.synthesize_chunk_summaries(
                         title=content.title or "",

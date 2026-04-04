@@ -8,7 +8,7 @@ from qdrant_client.http.models import FieldCondition, Filter, FilterSelector, Ma
 from app.core.config import settings
 from app.core.vector_config import vector_db
 from app.services.embedding_service import embedding_service
-from app.utils.search_ranking import compute_hybrid_score
+from app.utils.search_ranking import compute_hybrid_score, contains_anchor_terms, extract_anchor_terms, is_noisy_text
 from app.utils.text_chunking import split_into_chunks
 
 logger = logging.getLogger(__name__)
@@ -121,6 +121,7 @@ class VectorService:
         try:
             await self._ensure_collection()
             cleaned_query = (query or "").strip()
+            anchor_terms = extract_anchor_terms(cleaned_query)
             should_enhance = query_enhance and len(cleaned_query) <= 4
             enhanced_query = self._enhance_query(cleaned_query) if should_enhance else cleaned_query
 
@@ -173,6 +174,11 @@ class VectorService:
                 chunk_text = result.payload.get("chunk_text", "")
                 title = result.payload["title"]
                 tags = result.payload.get("tags", [])
+                anchor_source = f"{title} {chunk_text} {' '.join(tags)}"
+                if is_noisy_text(chunk_text):
+                    continue
+                if anchor_terms and not contains_anchor_terms(anchor_source, anchor_terms):
+                    continue
                 ranking_text = f"{title} {chunk_text} {' '.join(tags)}"
                 results.append(
                     {

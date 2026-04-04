@@ -1,4 +1,5 @@
 import asyncio
+import json
 import re
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urljoin, urlparse
@@ -281,6 +282,11 @@ class ScraperService:
             content = (candidate.get("content") or "").strip() if candidate else ""
             if content and not content.lower().startswith("data:"):
                 return urljoin(base_url, content)
+
+        json_ld_thumbnail = self._extract_thumbnail_from_json_ld(soup, base_url)
+        if json_ld_thumbnail:
+            return json_ld_thumbnail
+
         for link in soup.find_all("link"):
             href = (link.get("href") or "").strip()
             if not href:
@@ -289,7 +295,125 @@ class ScraperService:
             rel_parts = rel if isinstance(rel, (list, tuple)) else [*str(rel or "").split()]
             if any(str(r).lower() == "image_src" for r in rel_parts):
                 return urljoin(base_url, href)
+
+        inline_thumbnail = self._extract_representative_image(soup, base_url)
+        if inline_thumbnail:
+            return inline_thumbnail
+
         return None
+
+    def _extract_thumbnail_from_json_ld(self, soup: BeautifulSoup, base_url: str) -> Optional[str]:
+        for script in soup.find_all("script", attrs={"type": "application/ld+json"}):
+            raw = (script.string or script.get_text() or "").strip()
+            if not raw:
+                continue
+            try:
+                payload = json.loads(raw)
+            except Exception:
+                continue
+
+            image_url = self._find_image_in_json_ld(payload)
+            if image_url:
+                return urljoin(base_url, image_url)
+        return None
+
+    def _find_image_in_json_ld(self, payload: Any) -> Optional[str]:
+        if isinstance(payload, list):
+            for item in payload:
+                found = self._find_image_in_json_ld(item)
+                if found:
+                    return found
+            return None
+
+        if isinstance(payload, dict):
+            image_value = payload.get("image")
+            extracted = self._extract_image_value(image_value)
+            if extracted:
+                return extracted
+            for value in payload.values():
+                found = self._find_image_in_json_ld(value)
+                if found:
+                    return found
+        return None
+
+    def _extract_image_value(self, value: Any) -> Optional[str]:
+        if isinstance(value, str):
+            return value.strip() or None
+        if isinstance(value, list):
+            for item in value:
+                extracted = self._extract_image_value(item)
+                if extracted:
+                    return extracted
+        if isinstance(value, dict):
+            for key in ("url", "contentUrl", "thumbnailUrl"):
+                candidate = str(value.get(key, "")).strip()
+                if candidate:
+                    return candidate
+        return None
+
+    def _extract_representative_image(self, soup: BeautifulSoup, base_url: str) -> Optional[str]:
+        containers = []
+        for selector in ("article", "main"):
+            node = soup.find(selector)
+            if node:
+                containers.append(node)
+        containers.append(soup)
+
+        seen_urls: set[str] = set()
+        for container in containers:
+            for img in container.find_all("img"):
+                candidate = self._normalize_image_candidate(img, base_url)
+                if not candidate or candidate in seen_urls:
+                    continue
+                seen_urls.add(candidate)
+                if self._looks_like_thumbnail_candidate(img, candidate):
+                    return candidate
+        return None
+
+    def _normalize_image_candidate(self, img: Any, base_url: str) -> Optional[str]:
+        attrs = [
+            img.get("src"),
+            img.get("data-src"),
+            img.get("data-original"),
+            img.get("data-lazy-src"),
+        ]
+        for value in attrs:
+            candidate = (value or "").strip()
+            if not candidate or candidate.lower().startswith("data:"):
+                continue
+            return urljoin(base_url, candidate)
+        return None
+
+    def _looks_like_thumbnail_candidate(self, img: Any, candidate_url: str) -> bool:
+        lowered = candidate_url.lower()
+        reject_keywords = (
+            "logo",
+            "icon",
+            "sprite",
+            "avatar",
+            "emoji",
+            "banner",
+            "blank",
+        )
+        if any(keyword in lowered for keyword in reject_keywords):
+            return False
+
+        width = self._safe_int(img.get("width"))
+        height = self._safe_int(img.get("height"))
+        if width and width < 160:
+            return False
+        if height and height < 90:
+            return False
+        alt = (img.get("alt") or "").strip().lower()
+        if alt in {"logo", "아이콘"}:
+            return False
+        return True
+
+    def _safe_int(self, value: Any) -> int:
+        try:
+            return int(str(value).strip())
+        except Exception:
+            return 0
 
     def _is_usable_text(self, text: str) -> bool:
         normalized = " ".join((text or "").split()).strip().lower()
