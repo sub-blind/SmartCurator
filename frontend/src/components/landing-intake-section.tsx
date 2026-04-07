@@ -103,6 +103,9 @@ const SOURCE_EMPTY_PANEL: Record<
 const LANDING_POLL_MAX_ATTEMPTS = 90;
 const LANDING_POLL_INTERVAL_MS = 2500;
 
+/** Tailwind `lg` — 왼쪽 열 실제 높이에 맞춰 오른쪽 채팅 패널 높이를 고정 */
+const LG_MEDIA_QUERY = "(min-width: 1024px)";
+
 function makeAutoTitle(sourceKind: SourceKind, draftValue: string, fileName?: string | null) {
   if (sourceKind === "pdf" && fileName) {
     return fileName.replace(/\.[^.]+$/, "").trim() || "PDF 문서";
@@ -160,6 +163,8 @@ export function LandingIntakeSection() {
   const pollTimeoutRef = useRef<number | null>(null);
   const chatInputRef = useRef<HTMLInputElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  const leftIntakeColumnRef = useRef<HTMLDivElement>(null);
+  const [rightPanelHeightPx, setRightPanelHeightPx] = useState<number | null>(null);
   const [previewThumbFailed, setPreviewThumbFailed] = useState(false);
   const [previewThumbLightboxOpen, setPreviewThumbLightboxOpen] = useState(false);
 
@@ -216,6 +221,35 @@ export function LandingIntakeSection() {
     return () => window.removeEventListener("keydown", onKey);
   }, [previewThumbLightboxOpen]);
 
+  /** 그리드만으로는 오른쪽 요약·채팅이 행 높이를 밀어 올림 → 왼쪽 박스 높이를 재서 오른쪽에 그대로 고정 */
+  useLayoutEffect(() => {
+    const leftEl = leftIntakeColumnRef.current;
+    if (!leftEl || typeof window === "undefined") return;
+
+    const mql = window.matchMedia(LG_MEDIA_QUERY);
+
+    const sync = () => {
+      if (!mql.matches) {
+        setRightPanelHeightPx(null);
+        return;
+      }
+      const h = leftEl.getBoundingClientRect().height;
+      if (h > 0) setRightPanelHeightPx(Math.round(h * 10) / 10);
+    };
+
+    const ro = new ResizeObserver(sync);
+    ro.observe(leftEl);
+    mql.addEventListener("change", sync);
+    window.addEventListener("resize", sync);
+    sync();
+
+    return () => {
+      ro.disconnect();
+      mql.removeEventListener("change", sync);
+      window.removeEventListener("resize", sync);
+    };
+  }, [message, activeSource, loading, previewContent?.id, previewContent?.status]);
+
   const pollContent = async (contentId: number, authToken: string, attempt = 0) => {
     try {
       const latest = await api.getContent(contentId, authToken);
@@ -234,7 +268,17 @@ export function LandingIntakeSection() {
         );
       }
     } catch {
-      // Keep initial preview even if polling fails.
+      /* 한 번 실패했다고 폴링을 끊지 않음 — 네트워크/세션 일시 오류로 완료 화면이 안 보이는 문제 방지 */
+      if (attempt < LANDING_POLL_MAX_ATTEMPTS) {
+        pollTimeoutRef.current = window.setTimeout(() => {
+          void pollContent(contentId, authToken, attempt + 1);
+        }, LANDING_POLL_INTERVAL_MS);
+      }
+      if (attempt >= 3) {
+        setMessage(
+          "처리 상태를 여러 번 가져오지 못했어요. 백엔드·워커·로그인을 확인하거나 페이지를 새로고침한 뒤 내 자료에서 확인해 주세요.",
+        );
+      }
     }
   };
 
@@ -246,7 +290,7 @@ export function LandingIntakeSection() {
     setChatQuestion("");
     setChatLoading(true);
     try {
-      const answer = await api.askAssistant(trimmed, token);
+      const answer = await api.askAssistant(trimmed, token, previewContent?.id);
       setChatMessages((prev) => [
         ...prev,
         { role: "assistant", text: answer.answer, sources: answer.sources },
@@ -332,8 +376,11 @@ export function LandingIntakeSection() {
   return (
     <>
     <section className="surface-card max-w-full overflow-hidden rounded-[1.5rem] p-4 sm:rounded-[2rem] sm:p-6 lg:p-8 xl:p-10">
-      <div className="grid min-w-0 gap-6 sm:gap-8 lg:grid-cols-[minmax(0,0.98fr)_minmax(0,1fr)] lg:items-stretch xl:grid-cols-[minmax(0,0.98fr)_minmax(320px,0.82fr)]">
-        <div className="flex min-w-0 flex-col gap-4 sm:gap-5 lg:min-h-0">
+      <div className="grid min-w-0 gap-6 sm:gap-8 lg:grid-cols-[minmax(0,0.98fr)_minmax(0,1fr)] lg:items-start xl:grid-cols-[minmax(0,0.98fr)_minmax(320px,0.82fr)]">
+        <div
+          ref={leftIntakeColumnRef}
+          className="flex min-w-0 flex-col gap-4 sm:gap-5 lg:min-h-0 lg:self-start"
+        >
           <div className="relative">
             <div
               className="pointer-events-none absolute -left-4 -top-4 h-32 w-36 rounded-full bg-[var(--accent)]/12 blur-3xl sm:-left-6 sm:-top-6 sm:h-40 sm:w-52"
@@ -463,7 +510,14 @@ export function LandingIntakeSection() {
           </div>
         </div>
 
-        <div className="flex min-h-0 w-full min-w-0 flex-col max-h-[min(34rem,calc(100dvh-11rem))] sm:max-h-[min(36rem,calc(100dvh-10rem))] lg:h-full lg:max-h-none">
+        <div
+          className="flex h-[min(26rem,calc(100dvh-9rem))] min-h-0 w-full min-w-0 flex-col overflow-hidden sm:h-[min(30rem,calc(100dvh-9.5rem))] lg:min-h-0 lg:overflow-hidden"
+          style={
+            rightPanelHeightPx != null
+              ? { height: rightPanelHeightPx, maxHeight: rightPanelHeightPx }
+              : undefined
+          }
+        >
           {previewContent ? (
             <article className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface-elevated)]">
               <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface-muted)]/35 px-4 pt-3.5 pb-3 sm:px-5 sm:pt-4 sm:pb-3.5">
@@ -507,7 +561,10 @@ export function LandingIntakeSection() {
               </div>
 
               {/* ── 스크롤 영역: 요약 + 대화 ── */}
-              <div ref={chatScrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              <div
+                ref={chatScrollRef}
+                className="min-h-0 flex-1 overflow-y-scroll overscroll-contain pr-1 [scrollbar-gutter:stable]"
+              >
 
                 {/* 요약·태그 — 썸네일은 전체 너비(이전 형태), 제목·입력창과 함께 스크롤만 공유 */}
                 <div className="space-y-4 px-5 py-4">
@@ -700,7 +757,7 @@ export function LandingIntakeSection() {
                 </div>
               </div>
 
-              <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[var(--surface-muted)]/20">
+              <div className="relative min-h-0 flex-1 overflow-y-scroll overscroll-contain bg-[var(--surface-muted)]/20 pr-1 [scrollbar-gutter:stable]">
                 <div
                   className="pointer-events-none absolute inset-0 opacity-[0.35] [background-image:radial-gradient(var(--border)_0.5px,transparent_0.5px)] [background-size:12px_12px]"
                   aria-hidden

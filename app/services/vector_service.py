@@ -112,6 +112,7 @@ class VectorService:
         self,
         query: str,
         user_id: Optional[int] = None,
+        content_id: Optional[int] = None,
         limit: int = 12,
         score_threshold: float = 0.05,
         fallback_threshold: float = 0.0,
@@ -130,10 +131,14 @@ class VectorService:
                 logger.error("Failed to generate query embedding")
                 return []
 
+            filter_conditions = []
             if user_id is not None:
-                search_filter = Filter(
-                    must=[FieldCondition(key="user_id", match=MatchValue(value=user_id))]
-                )
+                filter_conditions.append(FieldCondition(key="user_id", match=MatchValue(value=user_id)))
+            if content_id is not None:
+                filter_conditions.append(FieldCondition(key="content_id", match=MatchValue(value=content_id)))
+
+            if filter_conditions:
+                search_filter = Filter(must=filter_conditions)
             else:
                 search_filter = Filter(
                     must=[FieldCondition(key="is_public", match=MatchValue(value=True))]
@@ -177,9 +182,8 @@ class VectorService:
                 anchor_source = f"{title} {chunk_text} {' '.join(tags)}"
                 if is_noisy_text(chunk_text):
                     continue
-                if anchor_terms and not contains_anchor_terms(anchor_source, anchor_terms):
-                    continue
                 ranking_text = f"{title} {chunk_text} {' '.join(tags)}"
+                anchor_match = contains_anchor_terms(anchor_source, anchor_terms) if anchor_terms else True
                 results.append(
                     {
                         "content_id": result.payload["content_id"],
@@ -193,7 +197,8 @@ class VectorService:
                             query=cleaned_query,
                             text=ranking_text,
                             similarity_score=float(result.score),
-                        ),
+                        ) + (0.06 if anchor_match else 0.0),
+                        "anchor_match": anchor_match,
                         "user_id": result.payload["user_id"],
                     }
                 )

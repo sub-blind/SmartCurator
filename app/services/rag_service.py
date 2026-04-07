@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class RAGService:
-    """RAG service for grounded question answering over stored content."""
+    """Grounded question answering over stored content."""
 
     def __init__(self):
         self.ai_service = AIService()
@@ -25,7 +25,7 @@ class RAGService:
         self.rerank_similarity_weight = 0.7
         self.rerank_overlap_weight = 0.3
         self.max_chunks_per_content = 2
-        self.min_visible_source_score = 0.34
+        self.min_visible_source_score = 0.26
         self._noise_patterns = [
             re.compile(r"공유(하기)?", re.IGNORECASE),
             re.compile(r"페이스북|카카오톡|밴드|트위터", re.IGNORECASE),
@@ -42,21 +42,23 @@ class RAGService:
             return f"[masked len={len(cleaned)}]"
         return cleaned
 
-    async def ask_question(self, question: str, user_id: int) -> Dict:
+    async def ask_question(self, question: str, user_id: int, content_id: int | None = None) -> Dict:
         start_time = perf_counter()
         try:
             logger.info(
-                "RAG question received: question=%r user_id=%s",
+                "RAG question received: question=%r user_id=%s content_id=%s",
                 self._sanitize_query_for_log(question),
                 user_id,
+                content_id,
             )
 
             retrieved_chunks = await vector_service.search_similar_chunks(
                 query=question,
                 user_id=user_id,
+                content_id=content_id,
                 limit=12,
-                score_threshold=0.18,
-                fallback_threshold=0.12,
+                score_threshold=0.14,
+                fallback_threshold=0.08,
             )
             reranked_chunks = self._rerank_chunks(question, retrieved_chunks)[:8]
             visible_chunks = self._filter_visible_chunks(reranked_chunks)
@@ -74,7 +76,7 @@ class RAGService:
                     latency_ms,
                 )
                 return {
-                    "answer": "죄송합니다. 질문에 맞는 근거 문서를 충분히 찾지 못했습니다.",
+                    "answer": "질문과 직접 맞닿는 근거를 충분히 찾지 못했습니다. 표현을 조금 바꾸거나, 자료 안의 표현으로 다시 물어보면 더 잘 찾을 수 있습니다.",
                     "sources": [],
                     "confidence": 0.0,
                 }
@@ -124,7 +126,7 @@ class RAGService:
         except Exception as e:
             logger.error("RAG ask_question error: %s", e, exc_info=True)
             return {
-                "answer": "죄송합니다. 답변 생성 중 오류가 발생했습니다.",
+                "answer": "답변 생성 중 오류가 발생했습니다.",
                 "sources": [],
                 "confidence": 0.0,
             }
@@ -181,11 +183,11 @@ class RAGService:
         per_content_count: Dict[int, int] = {}
         diversified: List[Dict] = []
         for item in scored:
-            content_id = item["content_id"]
-            used = per_content_count.get(content_id, 0)
+            item_content_id = item["content_id"]
+            used = per_content_count.get(item_content_id, 0)
             if used >= self.max_chunks_per_content:
                 continue
-            per_content_count[content_id] = used + 1
+            per_content_count[item_content_id] = used + 1
             diversified.append(item)
 
         return diversified
@@ -196,10 +198,10 @@ class RAGService:
 
         top_similarity = chunks[0].get("similarity_score", 0.0)
         top_hybrid = chunks[0].get("_hybrid_score", top_similarity)
-        relative_similarity_floor = max(self.min_visible_source_score, top_similarity - 0.06)
-        relative_hybrid_floor = max(top_hybrid - 0.08, 0.0)
+        relative_similarity_floor = max(self.min_visible_source_score, top_similarity - 0.10)
+        relative_hybrid_floor = max(top_hybrid - 0.12, 0.0)
 
-        return [
+        filtered = [
             chunk
             for chunk in chunks
             if (
@@ -207,15 +209,18 @@ class RAGService:
                 and chunk.get("_hybrid_score", chunk.get("similarity_score", 0.0)) >= relative_hybrid_floor
             )
         ]
+        if not filtered and chunks:
+            return chunks[:1]
+        return filtered
 
     def _build_sources(self, chunks: List[Dict]) -> List[Dict]:
         unique_sources: Dict[int, Dict] = {}
         for chunk in chunks:
-            content_id = chunk["content_id"]
-            current = unique_sources.get(content_id)
+            item_content_id = chunk["content_id"]
+            current = unique_sources.get(item_content_id)
             if current is None or chunk["similarity_score"] > current["similarity_score"]:
-                unique_sources[content_id] = {
-                    "content_id": content_id,
+                unique_sources[item_content_id] = {
+                    "content_id": item_content_id,
                     "title": chunk["title"],
                     "chunk_index": chunk["chunk_index"],
                     "snippet": self._clean_chunk_text(chunk.get("chunk_text", "")),

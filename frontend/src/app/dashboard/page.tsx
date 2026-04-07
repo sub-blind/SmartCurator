@@ -26,6 +26,14 @@ const SNIPPET_JUNK_REPLACE =
   /tp:\/\/|tps:\/\/|:\/\/\(|www\.fnnews\.com|뉴스\s*1위|실시간\s*뉴스\s*속보|구독신청|모바일\s*웹/gi;
 const CONTENTS_PAGE_SIZE = 3;
 const TOAST_TTL_MS = 3500;
+
+const EXPLORE_SEARCH_EXAMPLES = ["쌈짓돈 논란 핵심 쟁점", "원유 수급과 국내 물가", "최근 반도체 투자 동향"];
+
+function confidenceBarsFromScore(confidence: number): { label: string; filled: number } {
+  if (confidence >= 0.55) return { label: "신뢰 높음", filled: 3 };
+  if (confidence >= 0.35) return { label: "신뢰 보통", filled: 2 };
+  return { label: "신뢰 낮음", filled: 1 };
+}
 const SUMMARY_PREVIEW_MAX_LENGTH = 560;
 
 type DashboardToast = {
@@ -175,6 +183,7 @@ function DashboardPageContent() {
   const [savingTitle, setSavingTitle] = useState(false);
   const [expandedSearchResults, setExpandedSearchResults] = useState<Set<number>>(new Set());
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
+  const [showAllAiSources, setShowAllAiSources] = useState(false);
   const [showQuickGuide, setShowQuickGuide] = useState(false);
   const [currentContentsPage, setCurrentContentsPage] = useState(1);
   const [toasts, setToasts] = useState<DashboardToast[]>([]);
@@ -381,8 +390,14 @@ function DashboardPageContent() {
     setDetailThumbFailed(false);
   }, [selectedContent]);
 
-  const handleSemanticSearch = async () => {
-    if (!token || !searchQuery.trim()) return;
+  useEffect(() => {
+    setShowAllAiSources(false);
+  }, [chatAnswer]);
+
+  const handleSemanticSearch = async (queryOverride?: string) => {
+    const q = (queryOverride !== undefined ? queryOverride : searchQuery).trim();
+    if (!token || !q) return;
+    if (queryOverride !== undefined) setSearchQuery(queryOverride);
     setSearchLoading(true);
     setSearchMessage(null);
     try {
@@ -391,7 +406,7 @@ function DashboardPageContent() {
         balanced: 0.12,
         broad: 0.07,
       };
-      const response = await api.semanticSearch(searchQuery.trim(), token, {
+      const response = await api.semanticSearch(q, token, {
         limit: 6,
         score_threshold: scoreThresholdByMode[searchMode],
       });
@@ -842,189 +857,310 @@ function DashboardPageContent() {
         hidden={dashboardView !== "explore"}
         className="space-y-6"
       >
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section className="surface-card flex max-h-[min(88dvh,52rem)] flex-col gap-4 rounded-3xl p-6 lg:sticky lg:top-28">
+      <div
+        className="mb-5 rounded-2xl border border-[var(--border)] bg-gradient-to-br from-[var(--surface-muted)]/80 to-[var(--surface-muted)]/30 px-4 py-3 shadow-[0_10px_28px_-12px_rgba(0,0,0,0.45)]"
+        role="region"
+        aria-label="검색·AI 사용 순서"
+      >
+        <p className="text-[11px] leading-relaxed text-[var(--text-secondary)]">
+          <span className="font-semibold text-[var(--text-primary)]">흐름</span>
+          <span className="hidden sm:inline">
+            {" "}
+            · ① 의미 검색으로 카드 찾기 → ② 유사도·발췌로 확인 → ③ 오른쪽에서 질문·정리
+          </span>
+          <span className="sm:hidden"> · 검색 → 확인 → AI 질문</span>
+        </p>
+      </div>
+
+      <div className="grid min-w-0 gap-6 lg:grid-cols-2">
+        <section className="surface-card explore-panel-lift flex max-h-[min(88dvh,52rem)] min-h-0 flex-col gap-4 rounded-3xl p-6 lg:sticky lg:top-28">
           <div className="shrink-0 border-b border-[var(--border)] pb-3">
-            <span className="inline-flex rounded-lg bg-[var(--tone-sky)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-primary)]">
+            <span className="inline-flex rounded-lg bg-[var(--tone-sky)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-primary)] shadow-sm shadow-black/15">
               찾기
             </span>
             <h2 className="mt-1 text-lg font-semibold text-[var(--text-primary)]">의미론적 검색</h2>
             <p className="mt-1 text-xs text-[var(--text-secondary)]">
-              저장한 콘텐츠를 키워드가 아니라 의미 기준으로 검색합니다. 잡문구·링크는 자동으로 걷어 냅니다.
+              키워드보다 뜻으로 찾습니다. 스팸 문구와 링크 잡음은 정리합니다.
             </p>
           </div>
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
-          <div className="flex flex-wrap gap-2">
-            {[
-              { id: "strict", label: "딱 맞는 결과", hint: "정확도 우선" },
-              { id: "balanced", label: "적당히 넓게", hint: "기본 추천" },
-              { id: "broad", label: "관련 내용까지", hint: "탐색 범위 확장" },
-            ].map((mode) => {
-              const selected = searchMode === mode.id;
-              return (
-                <button
-                  key={mode.id}
-                  type="button"
-                  onClick={() => setSearchMode(mode.id as "strict" | "balanced" | "broad")}
-                  title={mode.hint}
-                  className={`whitespace-nowrap rounded-full px-3 py-1 text-xs transition ${
-                    selected
-                      ? "border border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"
-                      : "border border-[var(--border-strong)] text-[var(--text-secondary)] hover:border-[var(--accent)]"
-                  }`}
-                >
-                  {mode.label}
-                </button>
-              );
-            })}
-          </div>
-          <div className="flex gap-2">
-            <input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="예: 쌈짓돈 논란 핵심 쟁점"
-              className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface-elevated)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
-            />
-            <button
-              type="button"
-              onClick={handleSemanticSearch}
-              disabled={searchLoading}
-              className="whitespace-nowrap rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]">
+            <div
+              className="explore-inset-well p-1"
+              role="group"
+              aria-label="검색 범위"
             >
-              {searchLoading ? "검색 중.." : "검색"}
-            </button>
-          </div>
-          {searchMessage && <p className="text-xs text-[var(--text-secondary)]">{searchMessage}</p>}
-          <div className="space-y-3">
-            {searchResults.map((result) => {
-              const text = chooseSearchExcerpt(result);
-              const expanded = expandedSearchResults.has(result.content_id);
-              const isLong = text.length > 220;
-              return (
-                <article
-                  key={result.content_id}
-                  className="rounded-2xl border border-[var(--border)] border-l-4 border-l-[var(--accent)] bg-[var(--surface-muted)] p-4 shadow-sm shadow-[var(--accent)]/5"
+              <div className="grid grid-cols-1 gap-1 sm:grid-cols-3">
+                {(
+                  [
+                    { id: "strict" as const, label: "딱 맞는 결과", hint: "정확도 우선" },
+                    { id: "balanced" as const, label: "적당히 넓게", hint: "기본 추천" },
+                    { id: "broad" as const, label: "관련까지", hint: "탐색 범위 확장" },
+                  ] as const
+                ).map((mode) => {
+                  const selected = searchMode === mode.id;
+                  return (
+                    <button
+                      key={mode.id}
+                      type="button"
+                      onClick={() => setSearchMode(mode.id)}
+                      title={mode.hint}
+                      className={`relative rounded-lg px-3 py-2 text-center text-xs font-medium transition ${
+                        selected
+                          ? "border border-[var(--accent)]/50 bg-[var(--accent-soft)] text-[var(--accent-strong)] shadow-[0_2px_8px_-2px_rgba(37,99,235,0.45)]"
+                          : "border border-transparent text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-elevated)]/40"
+                      }`}
+                    >
+                      {mode.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="explore-inset-well flex flex-col gap-2 p-2 sm:flex-row sm:items-stretch">
+              <div className="flex min-h-[44px] min-w-0 flex-1 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 shadow-[inset_0_1px_2px_rgba(0,0,0,0.12)]">
+                <svg
+                  className="h-4 w-4 shrink-0 text-[var(--text-muted)]"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  aria-hidden
                 >
-                  <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] pb-2">
-                    <h3 className="min-w-0 text-sm font-semibold leading-snug text-[var(--text-primary)]">
-                      {displayTitle(result.title, result.content_id)}
-                    </h3>
-                    <span className="shrink-0 rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--accent-strong)]">
-                      유사도 {result.similarity_score.toFixed(3)}
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="M20 20l-4-4" strokeLinecap="round" />
+                </svg>
+                <input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !searchLoading) void handleSemanticSearch();
+                  }}
+                  placeholder="무엇을 찾을까요?"
+                  className="min-w-0 flex-1 bg-transparent py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
+                  aria-label="의미 검색어"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleSemanticSearch()}
+                disabled={searchLoading}
+                className="shrink-0 rounded-lg bg-[var(--accent)] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_4px_14px_-4px_rgba(37,99,235,0.65),0_2px_0_0_rgba(0,0,0,0.2)] transition hover:brightness-110 disabled:opacity-50"
+              >
+                {searchLoading ? "검색 중…" : "검색"}
+              </button>
+            </div>
+
+            {searchResults.length === 0 && !searchLoading && (
+              <div className="rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-muted)]/35 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                <p className="text-xs font-medium text-[var(--text-primary)]">예시로 한 번 찾아보기</p>
+                <p className="mt-1 text-[11px] text-[var(--text-muted)]">버튼을 누르면 입력창에 넣고 바로 검색합니다.</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {EXPLORE_SEARCH_EXAMPLES.map((ex) => (
+                    <button
+                      key={ex}
+                      type="button"
+                      onClick={() => void handleSemanticSearch(ex)}
+                      className="rounded-full border border-[var(--border-strong)] bg-[var(--surface-elevated)] px-3 py-1.5 text-[11px] text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--accent)] hover:text-[var(--text-primary)]"
+                    >
+                      {ex}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {searchMessage && (
+              <p className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)]/50 px-3 py-2 text-xs text-[var(--text-secondary)]">
+                {searchMessage}
+              </p>
+            )}
+
+            <div className="space-y-3">
+              {searchResults.map((result, index) => {
+                const text = chooseSearchExcerpt(result);
+                const expanded = expandedSearchResults.has(result.content_id);
+                const isLong = text.length > 220;
+                return (
+                  <article
+                    key={result.content_id}
+                    className="explore-result-card-3d relative rounded-2xl border border-[var(--border)] border-l-4 border-l-[var(--accent)] bg-[var(--surface-muted)] p-4"
+                  >
+                    <span
+                      className="absolute -left-0.5 -top-0.5 flex h-6 w-6 items-center justify-center rounded-br-lg rounded-tl-xl bg-[var(--accent)] text-[10px] font-bold text-white shadow-md"
+                      aria-hidden
+                    >
+                      {index + 1}
                     </span>
-                  </div>
-                  <p className="mt-2 text-[11px] text-[var(--text-muted)]">{getMatchReason(searchQuery, result)}</p>
-                  <div className="mt-2 rounded-xl bg-[var(--surface-elevated)]/60 px-3 py-2">
-                    <p className="whitespace-pre-wrap text-xs leading-relaxed text-[var(--text-secondary)]">
-                      {expanded || !isLong ? text : truncateText(text, 220)}
-                    </p>
-                    {isLong && (
-                      <button
-                        type="button"
-                        onClick={() => toggleSearchResult(result.content_id)}
-                        className="mt-1 text-[11px] text-[var(--accent-strong)] hover:underline"
-                      >
-                        {expanded ? "접기" : "더보기"}
-                      </button>
-                    )}
-                  </div>
-                  {result.tags.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {result.tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="rounded-full border px-2 py-0.5 text-[11px] font-medium bg-[var(--tag-chip-bg)] text-[var(--tag-chip-fg)] [border-color:var(--tag-chip-border)]"
-                        >
-                          #{tag}
-                        </span>
-                      ))}
+                    <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] pb-2 pl-5">
+                      <h3 className="min-w-0 text-sm font-semibold leading-snug text-[var(--text-primary)]">
+                        {displayTitle(result.title, result.content_id)}
+                      </h3>
+                      <span className="shrink-0 rounded-full border border-[var(--accent)]/25 bg-[var(--accent-soft)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--accent-strong)] shadow-sm">
+                        유사도 {result.similarity_score.toFixed(3)}
+                      </span>
                     </div>
-                  )}
-                </article>
-              );
-            })}
-          </div>
+                    <p className="mt-2 pl-5 text-[11px] text-[var(--text-muted)]">
+                      · {getMatchReason(searchQuery, result)}
+                    </p>
+                    <div className="mt-2 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)]/55 px-3 py-2 shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)]">
+                      <p className="whitespace-pre-wrap text-xs leading-relaxed text-[var(--text-secondary)]">
+                        {expanded || !isLong ? text : truncateText(text, 220)}
+                      </p>
+                      {isLong && (
+                        <button
+                          type="button"
+                          onClick={() => toggleSearchResult(result.content_id)}
+                          className="mt-1 text-[11px] font-medium text-[var(--accent-strong)] hover:underline"
+                        >
+                          {expanded ? "접기" : "더보기"}
+                        </button>
+                      )}
+                    </div>
+                    {result.tags.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5 pl-5">
+                        {result.tags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="rounded-full border px-2 py-0.5 text-[11px] font-medium bg-[var(--tag-chip-bg)] text-[var(--tag-chip-fg)] [border-color:var(--tag-chip-border)]"
+                          >
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
           </div>
         </section>
 
-        <section className="surface-card flex max-h-[min(88dvh,52rem)] flex-col gap-4 rounded-3xl p-6 lg:sticky lg:top-28">
+        <section className="surface-card explore-panel-lift flex max-h-[min(88dvh,52rem)] min-h-0 flex-col gap-4 rounded-3xl p-6 lg:sticky lg:top-28">
           <div className="shrink-0 border-b border-[var(--border)] pb-3">
-            <span className="inline-flex rounded-lg bg-[var(--tone-violet)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-primary)]">
+            <span className="inline-flex rounded-lg bg-[var(--tone-violet)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-primary)] shadow-sm shadow-black/15">
               질문
             </span>
             <h2 className="mt-1 text-lg font-semibold text-[var(--text-primary)]">AI 어시스턴트</h2>
             <p className="mt-1 text-xs text-[var(--text-secondary)]">
-              저장한 기사와 노트의 근거 문단을 바탕으로 질문에 답변합니다.
+              저장해 둔 자료의 근거 문단만 골라 답합니다. 왼쪽에서 먼저 관련 기사를 찾아도 좋아요.
             </p>
           </div>
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1">
-          <div className="space-y-3">
-            <textarea
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              rows={4}
-              placeholder="예: LG CNS가 어디에 투자했는지, 관련 기사 근거만 정리해줘"
-              className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface-elevated)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
-            />
-            <button
-              type="button"
-              onClick={handleAskAssistant}
-              disabled={chatLoading}
-              className="rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white shadow-md shadow-[var(--accent)]/25 transition hover:brightness-110 disabled:opacity-50"
-            >
-              {chatLoading ? "답변 생성 중..." : "질문하기"}
-            </button>
-          </div>
-          {chatMessage && (
-            <p className="text-xs font-medium text-[var(--status-danger-fg)]">{chatMessage}</p>
-          )}
-          {chatAnswer && (
-            <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-[var(--text-primary)]">답변</p>
-                <span className="text-[11px] text-[var(--accent-strong)]">
-                  신뢰도 {chatAnswer.confidence.toFixed(3)}
-                </span>
-              </div>
-              <p className="whitespace-pre-wrap text-sm text-[var(--text-secondary)]">{chatAnswer.answer}</p>
-              {chatAnswer.sources.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-[var(--text-secondary)]">근거 출처</p>
-                  {chatAnswer.sources.map((source, index) => {
-                    const sourceKey = `${source.content_id}-${source.chunk_index}-${index}`;
-                    const expanded = expandedSources.has(sourceKey);
-                    const cleanedSnippet = cleanSnippet(source.snippet);
-                    const isLong = cleanedSnippet.length > 220;
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]">
+            <div className="explore-inset-well space-y-3 p-4">
+              <label className="block text-[11px] font-medium text-[var(--text-muted)]">질문 입력</label>
+              <textarea
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    void handleAskAssistant();
+                  }
+                }}
+                rows={4}
+                placeholder="예: LG CNS가 어디에 투자했는지, 관련 기사 근거만 정리해줘"
+                className="w-full resize-y rounded-xl border border-[var(--border-strong)] bg-[var(--surface-elevated)] px-3 py-2 text-sm text-[var(--text-primary)] shadow-[inset_0_2px_6px_rgba(0,0,0,0.12)] focus:border-[var(--accent)] focus:outline-none"
+              />
+              <p className="text-[10px] text-[var(--text-muted)]">Ctrl+Enter 로 바로 질문하기</p>
+              <button
+                type="button"
+                onClick={() => void handleAskAssistant()}
+                disabled={chatLoading}
+                className="rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_4px_14px_-4px_rgba(124,58,237,0.5),0_2px_0_0_rgba(0,0,0,0.18)] transition hover:brightness-110 disabled:opacity-50"
+              >
+                {chatLoading ? "답변 생성 중…" : "질문하기"}
+              </button>
+            </div>
+
+            {chatMessage && (
+              <p className="text-xs font-medium text-[var(--status-danger-fg)]">{chatMessage}</p>
+            )}
+
+            {chatAnswer && (
+              <div className="explore-answer-card-3d space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">답변</p>
+                  {(() => {
+                    const cv = confidenceBarsFromScore(chatAnswer.confidence);
                     return (
-                      <div
-                        key={sourceKey}
-                        className="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-3"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-xs font-medium text-[var(--text-primary)]">{displayTitle(source.title, source.content_id)}</p>
-                          <span className="text-[11px] text-[var(--text-muted)]">
-                            청크 {source.chunk_index} · {source.similarity_score.toFixed(3)}
-                          </span>
+                      <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                        <span className="text-[11px] text-[var(--text-muted)]">{cv.label}</span>
+                        <div className="flex gap-1" aria-hidden>
+                          {[0, 1, 2].map((i) => (
+                            <span
+                              key={i}
+                              className={`h-2 w-7 rounded-sm ${
+                                i < cv.filled ? "bg-[var(--accent)] shadow-sm" : "bg-[var(--border-strong)] opacity-35"
+                              }`}
+                            />
+                          ))}
                         </div>
-                        <p className="mt-1 whitespace-pre-wrap text-xs text-[var(--text-secondary)]">
-                          {expanded || !isLong ? cleanedSnippet : truncateText(cleanedSnippet, 220)}
-                        </p>
-                        {isLong && (
-                          <button
-                            type="button"
-                            onClick={() => toggleSource(sourceKey)}
-                            className="mt-1 text-[11px] text-[var(--accent-strong)] hover:underline"
-                          >
-                            {expanded ? "접기" : "더보기"}
-                          </button>
-                        )}
+                        <span className="font-mono text-[11px] tabular-nums text-[var(--accent-strong)]">
+                          {chatAnswer.confidence.toFixed(3)}
+                        </span>
                       </div>
                     );
-                  })}
+                  })()}
                 </div>
-              )}
-            </div>
-          )}
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--text-secondary)]">
+                  {chatAnswer.answer}
+                </p>
+                {chatAnswer.sources.length > 0 && (
+                  <div className="space-y-2 border-t border-[var(--border)] pt-3">
+                    <p className="text-xs font-medium text-[var(--text-secondary)]">
+                      근거 출처{" "}
+                      <span className="font-normal text-[var(--text-muted)]">({chatAnswer.sources.length})</span>
+                    </p>
+                    {chatAnswer.sources.map((source, index) => {
+                      if (!showAllAiSources && index >= 2) return null;
+                      const sourceKey = `${source.content_id}-${source.chunk_index}-${index}`;
+                      const expanded = expandedSources.has(sourceKey);
+                      const cleanedSnippet = cleanSnippet(source.snippet);
+                      const isLong = cleanedSnippet.length > 220;
+                      return (
+                        <div
+                          key={sourceKey}
+                          className="explore-result-card-3d rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-3"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-medium text-[var(--text-primary)]">
+                              {displayTitle(source.title, source.content_id)}
+                            </p>
+                            <span className="text-[11px] text-[var(--text-muted)]">
+                              청크 {source.chunk_index} · {source.similarity_score.toFixed(3)}
+                            </span>
+                          </div>
+                          <p className="mt-1 whitespace-pre-wrap text-xs text-[var(--text-secondary)]">
+                            {expanded || !isLong ? cleanedSnippet : truncateText(cleanedSnippet, 220)}
+                          </p>
+                          {isLong && (
+                            <button
+                              type="button"
+                              onClick={() => toggleSource(sourceKey)}
+                              className="mt-1 text-[11px] font-medium text-[var(--accent-strong)] hover:underline"
+                            >
+                              {expanded ? "접기" : "더보기"}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {chatAnswer.sources.length > 2 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllAiSources((v) => !v)}
+                        className="text-[11px] font-medium text-[var(--accent-strong)] hover:underline"
+                      >
+                        {showAllAiSources
+                          ? "출처 접기"
+                          : `출처 ${chatAnswer.sources.length - 2}개 더 보기`}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </section>
       </div>

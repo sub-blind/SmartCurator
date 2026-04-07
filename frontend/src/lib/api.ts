@@ -7,6 +7,8 @@ type FetchOptions = {
 };
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/+$/, "");
+/** fetch 무한 대기 방지 (대시보드 목록 등) */
+const FETCH_TIMEOUT_MS = 45_000;
 const TOKEN_KEY = "smartcurator_token";
 const EMAIL_KEY = "smartcurator_email";
 const REFRESH_TOKEN_KEY = "smartcurator_refresh_token";
@@ -15,6 +17,11 @@ async function smartFetch<T>(endpoint: string, options: FetchOptions = {}): Prom
   const { method = "GET", body, token } = options;
 
   let response: Response;
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeoutId =
+    controller && typeof window !== "undefined"
+      ? window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+      : null;
   try {
     response = await fetch(`${API_BASE}${endpoint}`, {
       method,
@@ -28,10 +35,18 @@ async function smartFetch<T>(endpoint: string, options: FetchOptions = {}): Prom
           : body
             ? JSON.stringify(body)
             : undefined,
-      cache: "no-store"
+      cache: "no-store",
+      signal: controller?.signal,
     });
   } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(
+        "요청 시간이 초과되었습니다. API 서버가 응답하는지, 주소(NEXT_PUBLIC_API_BASE_URL)가 Celery/DB와 같은 환경을 가리키는지 확인해 주세요.",
+      );
+    }
     throw new Error("백엔드에 연결할 수 없습니다. 네트워크 연결과 API 서버(Cloudflare Tunnel) 상태를 확인해 주세요.");
+  } finally {
+    if (timeoutId !== null) window.clearTimeout(timeoutId);
   }
 
   if (!response.ok) {
@@ -191,11 +206,14 @@ export const api = {
       },
     );
   },
-  askAssistant: (question: string, token: string) =>
+  askAssistant: (question: string, token: string, contentId?: number) =>
     smartFetch<ChatAnswer>("/chat/ask", {
       method: "POST",
       token,
-      body: { question }
+      body: {
+        question,
+        ...(typeof contentId === "number" ? { content_id: contentId } : {}),
+      }
     })
 };
 
