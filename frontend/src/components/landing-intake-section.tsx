@@ -420,21 +420,18 @@ export function LandingIntakeSection() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { icon: "📥", step: "1", title: "붙여넣기", desc: "링크·파일·메모를 넣으면", top: "border-t-[var(--tone-sky)]" },
-              { icon: "⚡", step: "2", title: "자동 요약", desc: "요약·태그·벡터가 생성되고", top: "border-t-[var(--tone-amber)]" },
-              { icon: "🤖", step: "3", title: "AI 질문", desc: "자료 기반으로 답변까지", top: "border-t-[var(--tone-violet)]" },
-            ].map((item) => (
-              <div
-                key={item.step}
-                className={`rounded-2xl border border-[var(--border)] border-t-2 ${item.top} bg-gradient-to-b from-[var(--surface-muted)] to-[var(--accent-soft)]/35 p-3 text-center shadow-sm shadow-slate-900/5 dark:shadow-black/20`}
+          <div className="flex flex-wrap items-center gap-2">
+            {["기사·블로그 링크", "유튜브 영상", "PDF 파일", "메모·텍스트"].map((label) => (
+              <span
+                key={label}
+                className="rounded-full border border-[var(--border-strong)] bg-[var(--surface-elevated)] px-3 py-1.5 text-xs text-[var(--text-secondary)]"
               >
-                <span className="text-xl">{item.icon}</span>
-                <p className="mt-1 text-xs font-semibold text-[var(--text-primary)]">{item.title}</p>
-                <p className="mt-0.5 text-[11px] leading-4 text-[var(--text-muted)]">{item.desc}</p>
-              </div>
+                {label}
+              </span>
             ))}
+            <span className="rounded-full border border-[var(--accent)]/30 bg-[var(--accent-soft)] px-3 py-1.5 text-xs font-medium text-[var(--accent-strong)]">
+              → 요약·태그·AI 질문
+            </span>
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-3">

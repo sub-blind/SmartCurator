@@ -34,6 +34,13 @@ function confidenceBarsFromScore(confidence: number): { label: string; filled: n
   if (confidence >= 0.35) return { label: "신뢰 보통", filled: 2 };
   return { label: "신뢰 낮음", filled: 1 };
 }
+
+/** 벡터 유사도(검색 결과)용 — AI 답변 신뢰도와 문구를 섞지 않음 */
+function similarityTierLabel(score: number): string {
+  if (score >= 0.45) return "가까움";
+  if (score >= 0.28) return "비슷함";
+  return "느슨한 연관";
+}
 const SUMMARY_PREVIEW_MAX_LENGTH = 560;
 
 type DashboardToast = {
@@ -802,9 +809,9 @@ function DashboardPageContent() {
 
         <section className="surface-card w-full space-y-3 rounded-3xl p-6 lg:sticky lg:top-28">
           <div>
-            <h2 className="text-lg font-semibold text-[var(--text-primary)]">콘텐츠 추가</h2>
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">자료 추가</h2>
             <p className="text-xs text-[var(--text-secondary)]">
-              기사 URL이나 텍스트를 넣으면 백엔드가 요약, 태그, 벡터를 생성합니다.
+              링크나 텍스트를 넣으면 요약과 태그가 자동으로 만들어집니다.
             </p>
           </div>
           <QuickAddForm
@@ -858,17 +865,13 @@ function DashboardPageContent() {
         className="space-y-6"
       >
       <div
-        className="mb-5 rounded-2xl border border-[var(--border)] bg-gradient-to-br from-[var(--surface-muted)]/80 to-[var(--surface-muted)]/30 px-4 py-3 shadow-[0_10px_28px_-12px_rgba(0,0,0,0.45)]"
+        className="mb-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)]/50 px-4 py-3"
         role="region"
-        aria-label="검색·AI 사용 순서"
+        aria-label="검색·AI 사용 안내"
       >
         <p className="text-[11px] leading-relaxed text-[var(--text-secondary)]">
-          <span className="font-semibold text-[var(--text-primary)]">흐름</span>
-          <span className="hidden sm:inline">
-            {" "}
-            · ① 의미 검색으로 카드 찾기 → ② 유사도·발췌로 확인 → ③ 오른쪽에서 질문·정리
-          </span>
-          <span className="sm:hidden"> · 검색 → 확인 → AI 질문</span>
+          왼쪽에서 찾고 싶은 내용을 검색한 뒤,{" "}
+          <span className="font-medium text-[var(--text-primary)]">오른쪽 AI</span>에게 관련 자료를 바탕으로 질문할 수 있어요.
         </p>
       </div>
 
@@ -997,7 +1000,7 @@ function DashboardPageContent() {
                         {displayTitle(result.title, result.content_id)}
                       </h3>
                       <span className="shrink-0 rounded-full border border-[var(--accent)]/25 bg-[var(--accent-soft)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--accent-strong)] shadow-sm">
-                        유사도 {result.similarity_score.toFixed(3)}
+                        {similarityTierLabel(result.similarity_score)} · {result.similarity_score.toFixed(3)}
                       </span>
                     </div>
                     <p className="mt-2 pl-5 text-[11px] text-[var(--text-muted)]">
