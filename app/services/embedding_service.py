@@ -9,8 +9,8 @@ class EmbeddingService:
     """텍스트 임베딩 생성 및 유사도 계산 서비스"""
     
     def __init__(self):
-        # 한국어 최적화 모델 (경량화된 버전)
-        self.model = SentenceTransformer('jhgan/ko-sroberta-multitask')
+        # 한/영 멀티링글 모델 (768차원, 한국어·영어 교차 검색 지원)
+        self.model = SentenceTransformer('paraphrase-multilingual-mpnet-base-v2')
         logger.info("🤖 임베딩 모델 로드 완료")
     
     def generate_embedding(self, text: str) -> List[float]:

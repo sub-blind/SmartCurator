@@ -60,7 +60,7 @@ class VectorService:
             await self._ensure_collection()
             await self.delete_content_vector(content_id)
 
-            chunks = split_into_chunks(raw_content or summary or title, chunk_size=1100, overlap=180)
+            chunks = split_into_chunks(summary or raw_content or title, chunk_size=1100, overlap=180)
             if not chunks:
                 chunks = [summary or title]
 
