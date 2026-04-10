@@ -26,8 +26,10 @@ Vercel에 올린 프론트를 쓸 때는 `NEXT_PUBLIC_API_BASE_URL`이 실제 AP
 
 ## 4. 검색·RAG
 
-1. 「검색·AI」 탭에서 의미 검색 (`GET /search/semantic`)
-2. 정확 / 균형 / 넓게 모드 전환
+1. 「검색·AI」 탭에서 의미 검색
+   - `GET /search/semantic?q=검색어&mode=balanced`
+   - `mode` 값: `precise`(정확, threshold 0.45) / `balanced`(균형, 0.25) / `broad`(넓게, 0.12)
+2. 모드 전환 후 결과 수·품질 차이 확인
 3. `POST /chat/ask` — 답변, 근거 snippet, confidence
 
 ## 5. 화면
