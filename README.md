@@ -6,7 +6,9 @@ SmartCurator는 URL, 메모/본문, PDF, 유튜브 링크를 저장하면 요약
 
 | 랜딩 페이지 — 저장 & 미리보기 | 대시보드 — 검색 & AI 질의응답 |
 | --- | --- |
-| ![랜딩 페이지](docs/screenshots/landing-home.png) | ![검색·AI 탭](docs/screenshots/dashboard-search-rag.png) |
+|![1](https://github.com/user-attachments/assets/50d4cf27-ddd4-4069-b6df-3633edf687a1) | ![4](https://github.com/user-attachments/assets/07fc7c58-0e59-4248-8796-c83e5f8004bf)
+
+|
 | URL·유튜브·PDF·메모 탭 전환, 가져오기 즉시 오른쪽에 요약 카드 노출 | 의미 기반 검색(정확·균형·넓게), 내 자료 근거 RAG 질의응답 |
 
 ## 배포 구조
